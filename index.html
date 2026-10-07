@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。最大4人のマルチプレイ対応。">
+<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。最大4人の対戦対応。">
 <title>SKYLANCE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,6 +102,11 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 .tbar{height:4px;background:rgba(141,255,180,.15);margin-bottom:8px}.tbar i{display:block;height:100%;width:0;background:var(--hud);transition:width .15s}
 #tut small{font:11px var(--mono);color:var(--muted)}
 #tutFinal{gap:10px;margin-top:6px}
+#mrList{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:6px}
+#mrList li{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--hud-dim);font:14px var(--mono);min-width:0}
+#mrList li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mrList .ok{color:var(--hud)}#mrList span:last-child{color:var(--muted);flex:none}
+#mrModeRow{margin-bottom:8px}#mrModeRow .btn.on{background:rgba(141,255,180,.22);border-color:var(--hud);color:var(--hud)}
 </style>
 
 </head>
@@ -152,7 +157,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
       </div>
       <div class="stack">
         <button class="btn" id="startBtn">出撃 — Sortie</button>
-        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">マルチプレイ（4人）</button></div>
+        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">対戦（最大4人）</button></div>
       </div>
     </div>
   </div>
@@ -187,12 +192,24 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
   <div class="panel result">
     <h2><span>Multiplayer</span><span>Free for all · max 4</span></h2>
     <p class="verdict">マルチプレイ</p>
-    <p>同じページを開いている人とリアルタイムで撃墜数を競う。途中参加OK。クイックマッチは空いている部屋に自動で入る。友達と遊ぶなら同じルームコードを入れよう。</p>
+    <p>最大4人でリアルタイム対戦。待機室で全員が「準備OK」を押すとラウンド開始。個人戦（バトルロイヤル）とチーム戦（2対2）、どちらも2ラウンド先取で勝ち。友達と遊ぶなら同じルームコードを入れよう。</p>
     <label class="field" for="callsign">コールサイン（英数字12文字まで）<input id="callsign" maxlength="12" autocomplete="off" spellcheck="false"></label>
     <button class="btn" id="quickBtn">クイックマッチ</button>
     <div class="inline"><input id="roomCode" maxlength="10" placeholder="ルームコード（例: nhs2）" autocomplete="off" aria-label="ルームコード"><button class="btn ghost sm" id="codeBtn">コードで参加</button></div>
     <p class="note" id="lobbyStatus" role="status"></p>
     <button class="btn ghost sm" id="lobbyBack">タイトルへ戻る</button>
+  </div>
+</section>
+
+<section id="mroom" class="screen" hidden>
+  <div class="panel result">
+    <h2><span>Briefing room</span><span id="mrCode"></span></h2>
+    <p class="verdict">対戦待機中</p>
+    <p class="note" id="mrInfo" role="status"></p>
+    <ul id="mrList" aria-label="参加パイロット"></ul>
+    <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（2対2）</button></div>
+    <p class="note" id="mrRule"></p>
+    <div class="row"><button class="btn" id="readyBtn">準備OK</button><button class="btn ghost" id="mrLeave">退出</button></div>
   </div>
 </section>
 
@@ -232,6 +249,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -777,6 +795,7 @@ function onPress(code) {
   if (code === 'KeyM') { setMute(!SND.muted); return; }
   if (code === 'KeyH') { setGuide(!opts.guide); return; }
   if (code === 'KeyN' && state === 'play' && mode === 'tutorial') { tutNext(); return; }
+  if (state === 'play' && mode === 'multi' && !player.alive && (code === 'KeyR' || code === 'Tab')) { const al = [...remotes.values()].filter(o => o.alive); if (al.length) NET.spec = al[(al.indexOf(NET.spec) + 1) % al.length]; return; }
   if (state !== 'play' || !player.alive) return;
   if (code === 'KeyX') { if (curTarget) { curTarget = null; lockT = 0; showMsg('LOCK RELEASED', HUDD, 1); } return; }
   if (code === 'KeyF' || code === 'KeyJ') playerFireMissile();
@@ -943,7 +962,7 @@ function spawnPhase2() {
   radio('NIGHTJAR', '先頭の機体…黄色い尾翼。敵エース「ヴァンタ」だ。気を抜くな、ケストレル1。', 5);
   radio('VANTA', 'ケストレルとかいうのはお前か。俺の空で好き勝手やってくれたな。', 4.5);
 }
-function aliveTargets() { const out = []; for (const e of enemies) if (e.alive) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') for (const o of remotes.values()) if (o.alive) out.push(o); return out; }
+function aliveTargets() { const out = []; for (const e of enemies) if (e.alive) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); return out; }
 function checkPhase() {
   if (missionResult || mode !== 'mission') return;
   if (phase === 1 && aliveTargets().length === 0) after(1.5, spawnPhase2);
@@ -1019,6 +1038,7 @@ function updateStreaks() {
 function damage(t, amt, byMissile) {
   if (!t.alive) return;
   if (t.remote) { // the victim's own client applies damage; we only report the hit
+    if (isAlly(t) || !NET.view || NET.view.ph !== 'fight') return;
     NET.hits.push([t.peer, byMissile ? 55 : 7, ++NET.hitSeq]); if (NET.hits.length > 10) NET.hits.shift();
     if (byMissile) { showMsg('HIT', HUDC); shake = Math.max(shake, .3); }
     return;
@@ -1089,6 +1109,7 @@ function ignite(m) {
   const d = m.pos.distanceTo(camera.position); sfxNoise(1.3, 1500, clamp(1 - d / 3000, 0, 1) * .6, 'bandpass', 350, .5);
 }
 function playerFireMissile() {
+  if (player.frozen) return;
   if (player.msl <= 0) { showMsg('NO MISSILES', WARN); return; }
   let i = -1; for (let k = 0; k < 4; k++) { const c = (player.nextPylon + k) % 4; if (player.pylon[c] <= 0) { i = c; break; } }
   if (i < 0) return;
@@ -1097,7 +1118,7 @@ function playerFireMissile() {
   launchMissile(player.mesh.userData.pylons[i], player.pos, player.fwd, player.speed, locked ? curTarget : null, 'player', player.up, inner ? .3 : .06, player.vel, inner ? 9 : 0);
 }
 function deployFlares() {
-  if (player.flares <= 0 || player.flareCd > 0) return;
+  if (player.frozen || player.flares <= 0 || player.flareCd > 0) return;
   player.flares--; player.flareCd = 1.2;
   const decoysNow = [];
   for (let i = 0; i < 6; i++) {
@@ -1353,6 +1374,7 @@ function updatePlayer(dt) {
   const P = player;
   const inp = readInput();
   if (!P.alive) return inp;
+  if (P.frozen) { inp.pitch = inp.roll = inp.yaw = 0; inp.gun = inp.boost = inp.brake = false; }
   const k = 1 - Math.exp(-dt * 6);
   P.cp += (inp.pitch - P.cp) * k; P.cr += (inp.roll - P.cr) * (1 - Math.exp(-dt * 8)); P.cy += (inp.yaw - P.cy) * k;
   const auth = clamp((P.speed - 55) / 140, .22, 1) * (1 - clamp((P.speed - 280) / 400, 0, .35));
@@ -1429,13 +1451,18 @@ const camOffset = new V3(0, 7, 32), camUp = new V3(0, 1, 0); let lookingAtTarget
 function updateCamera(dt, inp) {
   const P = player;
   const wasLook = lookingAtTarget; lookingAtTarget = !!(inp && inp.look && curTarget && P.alive); if (wasLook !== lookingAtTarget) post.first = true;
-  if (state === 'title') {
+  if (state === 'title' || state === 'mlobby') {
     const t = performance.now() / 1000;
     P.mesh.position.copy(P.pos); P.mesh.quaternion.copy(P.quat); P.mesh.visible = true;
     animateJet(P.mesh, Math.sin(t * 1.3) * .6, Math.sin(t * .9) * .7, Math.sin(t * .7) * .5, 0, 0, .55 + Math.max(0, Math.sin(t * .5)) * .45, dt, t);
     camera.position.set(P.pos.x + Math.cos(t * .12) * 30, P.pos.y + 5 + Math.sin(t * .084) * 3, P.pos.z + Math.sin(t * .12) * 30);
     camera.up.set(0, 1, 0); camera.lookAt(P.pos.x, P.pos.y + 1, P.pos.z);
     camFov = 50;
+  } else if (!P.alive && mode === 'multi' && [...remotes.values()].some(o => o.alive)) {
+    if (!NET.spec || !NET.spec.alive || !remotes.has(NET.spec.peer)) NET.spec = [...remotes.values()].find(o => o.alive);
+    const o = NET.spec; _v1.set(0, 8, 34).applyQuaternion(o.quat).add(o.pos);
+    camera.position.lerp(_v1, 1 - Math.exp(-dt * 5)); camUp.lerp(_v2.set(0, 1, 0).applyQuaternion(o.quat), 1 - Math.exp(-dt * 4)).normalize(); camera.up.copy(camUp);
+    camera.lookAt(_v3.copy(o.pos).addScaledVector(o.dir, 60));
   } else if (!P.alive) {
     camera.up.set(0, 1, 0); camera.lookAt(P.pos);
   } else if (lookingAtTarget) {
@@ -1537,7 +1564,7 @@ function drawCockpit(c, s) {
 }
 function drawHUD() {
   const c = hx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
-  if (state === 'title' || state === 'result') return;
+  if (state === 'title' || state === 'result' || state === 'mlobby') return;
   const s = clamp(Math.min(W, H) / 820, .58, 1.25), cx = W / 2, cy = H / 2, P = player, now = performance.now() / 1000;
   const blink = Math.floor(now * 4) % 2 === 0;
   const font = (px, f = MONO) => { c.font = `${Math.round(px * s)}px ${f}`; };
@@ -1589,7 +1616,7 @@ function drawHUD() {
     toScreen(t.pos, sp); if (sp.behind || sp.x < -40 || sp.x > W + 40 || sp.y < -40 || sp.y > H + 40) continue;
     const d = t.pos.distanceTo(P.pos), isCur = t === curTarget;
     const half = clamp(4000 / (d + 200), 9, 22) * s;
-    const col = isCur && locked ? WARN : t.ace ? AMBER : t.remote ? PCOL[t.color % 4] : HUDC;
+    const col = isCur && locked ? WARN : t.ace ? AMBER : t.remote ? (NET.view && NET.view.mode === 'team' ? '#ff7a6b' : PCOL[t.color % 4]) : HUDC;
     c.strokeStyle = col; c.fillStyle = col; c.lineWidth = (isCur ? 2.2 : 1.3) * s;
     if (t.kind === 'air') { const q = half * .45; // corner brackets
       c.beginPath(); for (const [sx2, sy2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { c.moveTo(sp.x + sx2 * half, sp.y + sy2 * (half - q)); c.lineTo(sp.x + sx2 * half, sp.y + sy2 * half); c.lineTo(sp.x + sx2 * (half - q), sp.y + sy2 * half); } c.stroke();
@@ -1604,6 +1631,9 @@ function drawHUD() {
     let tti = Infinity; for (const m of missiles) if (m.owner === 'player' && m.target === t && m.lit) tti = Math.min(tti, m.pos.distanceTo(t.pos) / Math.max(m.speed, 1));
     if (tti < 30) { c.fillStyle = HUDC; c.textBaseline = 'top'; c.fillText('MSL ' + tti.toFixed(1), sp.x + half + 5 * s, sp.y + half + 11 * s); }
   }
+  if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive || !isAlly(o)) continue; toScreen(o.pos, sp); if (sp.behind || sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H) continue;
+    c.fillStyle = c.strokeStyle = '#7fd6ff'; c.lineWidth = 1.6 * s; c.beginPath(); c.moveTo(sp.x, sp.y - 10 * s); c.lineTo(sp.x + 9 * s, sp.y + 6 * s); c.lineTo(sp.x - 9 * s, sp.y + 6 * s); c.closePath(); c.stroke();
+    font(11); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText('ALLY ' + o.label, sp.x, sp.y - 13 * s); }
   c.lineWidth = Math.max(1.2, 1.5 * s); c.strokeStyle = c.fillStyle = HUDC;
   if (curTarget && P.alive) {
     toScreen(curTarget.pos, sp);
@@ -1724,14 +1754,22 @@ function drawHUD() {
   } else if (mode === 'tutorial') {
     c.fillText('TRAINING  ·  ' + (tut.i + 1) + '/' + TUT.length, pad, pad);
   } else {
-    c.fillText('FREE FOR ALL  ·  ROOM ' + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP); c.fillText('撃墜数を競え（最大4人）', pad, pad + 18 * s);
-    // scoreboard (top-right)
-    const rows = [{ n: NET.callsign, k: NET.kills, d: NET.deaths, col: PCOL[NET.color % 4], me: true }, ...[...remotes.values()].map(o => ({ n: o.label, k: o.kills, d: o.deaths, col: PCOL[o.color % 4] }))].sort((a, b) => b.k - a.k || a.d - b.d);
-    const sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('PILOT            K   D', sx0, sy0);
-    rows.forEach((r, i) => { c.fillStyle = r.col; c.fillText((r.me ? '▶ ' : '') + r.n.padEnd(14, ' ') + String(r.k).padStart(3, ' ') + String(r.d).padStart(4, ' '), sx0, sy0 + (i + 1) * 17 * s); });
-    c.fillStyle = HUDC; c.textAlign = 'left';
-    if (!P.alive) { font(26); c.textAlign = 'center'; c.fillStyle = WARN; c.fillText('SHOT DOWN', cx, cy - 40 * s); font(15, JP); c.fillStyle = '#eaf3ee';
-      c.fillText((NET.killerName ? NET.killerName + ' に撃墜された  ·  ' : '') + '再出撃まで ' + Math.max(0, Math.ceil(NET.respawnT)), cx, cy); c.textAlign = 'left'; c.fillStyle = HUDC; }
+    const mt = NET.view || { ph: 'wait', r: 0, rl: 0, pl: [], w: {}, mode: 'ffa' };
+    c.fillText(`VERSUS · ${mt.mode === 'team' ? 'TEAM' : 'SURVIVAL'} · ROUND ${mt.r}  ·  ROOM ` + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP);
+    c.fillText(mt.mode === 'team' ? '敵チームを全滅させろ（2ラウンド先取）' : '最後まで生き残れ（2ラウンド先取）', pad, pad + 18 * s);
+    if (mt.ph === 'fight') { font(22); c.fillText(fmtTime(Math.max(0, mt.rl)), pad, pad + 38 * s); }
+    // versus board (top-right): wins + alive state
+    const ids = mt.pl.length ? mt.pl : roster();
+    const sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('PILOT            WIN  ', sx0, sy0);
+    ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return;
+      const name = me ? NET.callsign : o.label, alive = me ? P.alive : o.alive, wins = mt.w[mt.mode === 'team' && mt.tm ? 'T' + mt.tm[id] : id] || 0;
+      c.fillStyle = mt.mode === 'team' && mt.tm ? (mt.tm[id] ? '#ff7a6b' : '#7fd6ff') : PCOL[(me ? NET.color : o.color) % 4]; c.globalAlpha = alive || mt.ph === 'wait' ? 1 : .45;
+      c.fillText((me ? '▶ ' : '') + name.padEnd(14, ' ') + ' ' + '★'.repeat(wins).padEnd(2, '·') + (alive ? '  ●' : '  ×'), sx0, sy0 + (i + 1) * 17 * s); });
+    c.globalAlpha = 1; c.fillStyle = HUDC; c.textAlign = 'left';
+    if (mt.ph === 'count') { font(72); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = AMBER; c.fillText(String(Math.max(1, Math.ceil(mt.rl))), cx, cy - 60 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
+    if (!P.alive && (mt.ph === 'fight' || mt.ph === 'rend' || mt.ph === 'count')) { font(22); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = WARN;
+      c.fillText(mt.pl.includes(NET.me) ? 'SHOT DOWN' : 'SPECTATING', cx, 120 * s); font(14, JP); c.fillStyle = '#eaf3ee';
+      c.fillText((NET.killerName && mt.pl.includes(NET.me) ? NET.killerName + ' に撃墜された　·　' : '') + '観戦中' + (NET.spec ? '：' + NET.spec.label : '') + '　（R で切替）', cx, 148 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
   }
 
   // radar
@@ -1870,9 +1908,64 @@ function lobbyStatus(t) { $('#lobbyStatus').textContent = t; }
 async function getRoomApi() {
   if (NET.api) return NET.api;
   try { if (window.claude && typeof window.claude.use === 'function') { const r = await window.claude.use('room'); if (r) { NET.via = 'claude'; return (NET.api = r); } } } catch (e) {}
+  if (window.mqtt) { NET.via = 'relay'; return (NET.api = mqttRoomApi()); }
   if (window.Peer && window.RTCPeerConnection) { NET.via = 'p2p'; return (NET.api = peerRoomApi()); }
   if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && 'BroadcastChannel' in window) { NET.via = 'mock'; return (NET.api = mockRoom()); }
   return null;
+}
+// Relay transport: public MQTT brokers over secure WebSocket. Every player publishes
+// its presence to the room topic and subscribes to everyone else's, so it works
+// across home routers / phone networks where direct WebRTC fails.
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+function mqttRoomApi() {
+  let client = null, connecting = null;
+  async function getClient() {
+    if (client) return client;
+    if (connecting) return connecting;
+    connecting = (async () => {
+      for (const url of BROKERS) {
+        lobbyStatus('リレーサーバーに接続中… (' + url.split('/')[2].split(':')[0] + ')');
+        const c = await new Promise(res => {
+          let cl; try { cl = mqtt.connect(url, { clientId: 'sky_' + Math.random().toString(36).slice(2, 12), keepalive: 30, clean: true, reconnectPeriod: 2000, connectTimeout: 6000 }); } catch (e) { res(null); return; }
+          const to = setTimeout(() => { try { cl.end(true); } catch (e) {} res(null); }, 7000);
+          cl.once('connect', () => { clearTimeout(to); res(cl); }); cl.on('error', () => {});
+        });
+        if (c) { client = c; NET.broker = url.split('/')[2].split(':')[0]; return c; }
+      }
+      throw { code: 'net' };
+    })();
+    try { return await connecting; } finally { connecting = null; }
+  }
+  return { join: async name => mqttRoom(await getClient(), name) };
+}
+function mqttRoom(cl, name) {
+  const base = 'skylance-nhs/v2/' + name + '/p/', myId = 'm' + Math.random().toString(36).slice(2, 10);
+  let mine = {}, closed = false, snap = Object.freeze([]); const table = new Map();
+  const rebuild = () => {
+    const arr = [{ peer: myId, by: null, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence: mine, updatedAt: Date.now() }];
+    for (const [id, o] of table) arr.push({ peer: id, by: null, isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: o.presence, updatedAt: o.updatedAt });
+    snap = Object.freeze(arr);
+  };
+  const onMsg = (topic, payload) => {
+    if (closed || !topic.startsWith(base)) return; const id = topic.slice(base.length); if (!id || id === myId || id.length > 24) return;
+    if (!payload || payload.length === 0) { table.delete(id); rebuild(); return; }
+    if (payload.length > 6000) return; let pr; try { pr = JSON.parse(payload.toString()); } catch (e) { return; }
+    if (!pr || typeof pr !== 'object' || Array.isArray(pr)) return;
+    const now = Date.now(); table.set(id, { presence: pr, updatedAt: now, last: now }); rebuild();
+  };
+  cl.on('message', onMsg); cl.subscribe(base + '+', { qos: 0 });
+  const loop = setInterval(() => {
+    if (closed) return;
+    if (cl.connected) try { cl.publish(base + myId, JSON.stringify(mine), { qos: 0, retain: false }); } catch (e) {}
+    const now = Date.now(); let ch = false; for (const [id, o] of table) if (now - o.last > 5000) { table.delete(id); ch = true; } if (ch) rebuild();
+  }, 80);
+  rebuild();
+  return {
+    name, presence: async patch => { mine = Object.assign({}, mine, patch); for (const k in patch) if (patch[k] === null) delete mine[k]; rebuild(); },
+    peers: () => snap, onPeers: () => () => {}, connected: () => cl.connected, onConnection: h => { setTimeout(() => h(cl.connected)); return () => {}; },
+    emit: async () => {}, on: () => () => {},
+    leave: async () => { if (closed) return; closed = true; clearInterval(loop); try { cl.publish(base + myId, '', { qos: 0 }); cl.unsubscribe(base + '+'); } catch (e) {} cl.removeListener('message', onMsg); }
+  };
 }
 // P2P transport (PeerJS / WebRTC) with the same shape as the room capability.
 // Star topology: the first player in a room code becomes the host and relays
@@ -1984,8 +2077,9 @@ async function joinMatch(code) {
     try { r = await api.join(name); } catch (e) {
       if (e && e.code === 'not_permitted') r = api;
       else if (e && e.code === 'full') { if (code) { lobbyStatus('その部屋は満員です（4人まで）'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; } continue; }
+      else if (e && (e.code === 'not_granted' || e.code === 'revoked')) { lobbyStatus('このclaude.aiのページでは、あなたはマルチプレイに参加できません（claude.aiへのログインと招待が必要）。GitHub Pages版のURLで遊んでね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
       else if (e && e.code === 'unsupported') { lobbyStatus('このブラウザはP2P通信（WebRTC）に対応していません。Chrome / Edge / Safari の最新版で開いてね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
-      else if (NET.via === 'p2p') { lobbyStatus('接続サーバーに届きませんでした。ネットワーク（学校Wi-Fiの制限など）を確認して、もう一度試してね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
+      else if (NET.via === 'p2p' || NET.via === 'relay') { lobbyStatus('サーバーに接続できませんでした。ネットワーク（学校Wi-Fiの制限など）を確認して、もう一度試してね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; NET.api = null; return; }
       else continue; }
     lobbyStatus(`空域「${name.replace(/^sky-/, '').toUpperCase()}」を確認中…`);
     try { await r.presence({ v: 1, rm: name, n: NET.callsign, al: 0, p: [0, 0, 0] }); } catch (e) { continue; }
@@ -2015,19 +2109,128 @@ function startMulti() {
   Object.assign(NET, { hits: [], hitSeq: 0, lastHit: {}, kills: 0, deaths: 0, deathSeq: 0, killedBy: null, killerName: '', flare: null, flareSeq: 0, sendT: 0 });
   // tint our jet to our slot colour
   const pc = PBODY[NET.color % 4]; player.mesh.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHex() === 0x2d4a6a) o.material.color.setHex(pc[1]); });
-  respawnPlayer(); curTarget = null; lockT = 0; camView = 0;
-  $('#lobby').hidden = true; $('#title').hidden = true; $('#touch').hidden = !isTouch;
-  radio('NIGHTJAR', `ケストレル隊、空域「${NET.name.replace(/^sky-/, '').toUpperCase()}」へようこそ。ここではパイロット同士の撃墜戦だ。`, 5);
-  initAudio(); setGuide(opts.guide);
+  Object.assign(NET, { mt: null, lastMt: null, mtSeen: -1, curPh: '', rdy: 0, spawnKey: '', spec: null, mode: NET.mode || 'ffa' });
+  curTarget = null; lockT = 0; camView = 0;
+  $('#lobby').hidden = true; $('#title').hidden = true;
+  enterWaitRoom();
+  initAudio();
+}
+function enterWaitRoom() {
+  state = 'mlobby'; NET.rdy = 0; player.alive = false; player.frozen = false; gunFiring = false;
+  player.pos.set(0, 3000, 14500); player.quat.identity(); player.mesh.visible = true;
+  $('#mroom').hidden = false; $('#touch').hidden = true; $('#tut').hidden = true; setGuide(false, true); updateMroomUI(true);
+}
+function spawnForRound(mt) {
+  const P = player, n = mt.pl.length, i = Math.max(0, mt.pl.indexOf(NET.me));
+  let a = i / n * Math.PI * 2;
+  if (mt.mode === 'team' && mt.tm) { const t = mt.tm[NET.me] || 0, mates = mt.pl.filter(id => (mt.tm[id] || 0) === t), k = mates.indexOf(NET.me); a = t * Math.PI + (k - (mates.length - 1) / 2) * .18; }
+  const r = 6500; P.pos.set(Math.sin(a) * r, 3000, Math.cos(a) * r);
+  P.quat.setFromAxisAngle(UP, Math.atan2(P.pos.x, P.pos.z)); P.fwd.set(0, 0, -1).applyQuaternion(P.quat); P.velDir.copy(P.fwd);
+  Object.assign(P, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, frozen: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], flareCd: 0 });
+  P.mesh.visible = true; P.mesh.userData.pylons.forEach(p => { p.visible = true; p.scale.setScalar(1); }); camOffset.set(0, 7, 32); post.first = true; outTimer = 0;
+  for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; curTarget = null; lockT = 0;
+}
+// ---- match flow. The peer with the smallest id is the referee ("leader") and
+// publishes the match state in its presence; everyone follows it.
+const PHASES = ['wait', 'count', 'fight', 'rend', 'end'];
+function roster() { return [NET.me, ...remotes.keys()].filter(Boolean).sort(); }
+const isAlly = o => { const mt = NET.view; return !!(mt && mt.mode === 'team' && mt.tm && o.peer in mt.tm && mt.tm[o.peer] === mt.tm[NET.me]); };
+const inRound = id => { const mt = NET.view; return !!(mt && (mt.ph === 'count' || mt.ph === 'fight' || mt.ph === 'rend') && mt.pl.includes(id)); };
+function sanitizeMt(m) {
+  if (!m || typeof m !== 'object' || !PHASES.includes(m.ph)) return null;
+  const str = v => typeof v === 'string' ? v.slice(0, 40) : '';
+  const pl = Array.isArray(m.pl) ? m.pl.filter(x => typeof x === 'string').slice(0, 6).map(str) : [];
+  const tm = m.tm && typeof m.tm === 'object' ? Object.fromEntries(Object.entries(m.tm).slice(0, 6).map(([k, v]) => [str(k), v === 1 ? 1 : 0])) : null;
+  const w = m.w && typeof m.w === 'object' ? Object.fromEntries(Object.entries(m.w).slice(0, 8).map(([k, v]) => [str(k), clamp(numv(v), 0, 9)])) : {};
+  return { s: numv(m.s), ph: m.ph, r: clamp(numv(m.r), 0, 9), rl: clamp(numv(m.rl), -5, 600), pl, tm, w, mode: m.mode === 'team' ? 'team' : 'ffa', win: str(m.win), mid: str(m.mid) };
+}
+function setupRound(mt, present) {
+  mt.pl = present.slice(0, 4);
+  if (mt.mode === 'team') { mt.tm = {}; mt.pl.forEach((id, i) => { mt.tm[id] = i % 2; }); } else mt.tm = null;
+}
+function leaderStep(dt) {
+  const mt = NET.mt, present = roster();
+  const aliveOf = id => id === NET.me ? player.alive : !!(remotes.get(id) && remotes.get(id).alive);
+  const readyOf = id => id === NET.me ? NET.rdy === 1 : !!(remotes.get(id) && remotes.get(id).rdy);
+  const go = (ph, rl) => { mt.ph = ph; mt.rl = rl; mt.s++; };
+  if (mt.ph === 'wait') { mt.mode = NET.mode; if (present.length >= 2 && present.every(readyOf)) { mt.r = 1; mt.w = {}; mt.win = ''; mt.mid = Math.random().toString(36).slice(2, 8); setupRound(mt, present); go('count', 4); } }
+  else if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) go('fight', 240); }
+  else if (mt.ph === 'fight') {
+    mt.rl -= dt; const pl = mt.pl.filter(id => present.includes(id)), alive = pl.filter(aliveOf);
+    let done = false, winner = '';
+    if (mt.mode === 'team') { const teams = new Set(alive.map(id => mt.tm[id])); if (teams.size <= 1) { done = true; winner = teams.size ? 'T' + [...teams][0] : ''; } }
+    else if (alive.length <= 1) { done = true; winner = alive[0] || ''; }
+    if (!done && mt.rl <= 0) done = true;
+    if (done) { if (winner) mt.w[winner] = (mt.w[winner] || 0) + 1; mt.win = winner; go('rend', 4.5); }
+  }
+  else if (mt.ph === 'rend') { mt.rl -= dt; if (mt.rl <= 0) { const champ = Object.keys(mt.w).find(k => mt.w[k] >= 2);
+      if (champ || present.length < 2) { mt.win = champ || mt.win; go('end', 8); } else { mt.r++; setupRound(mt, present); go('count', 4); } } }
+  else if (mt.ph === 'end') { mt.rl -= dt; if (mt.rl <= 0) { mt.pl = []; mt.tm = null; go('wait', 0); } }
+}
+function winnerName(w) {
+  if (!w) return '';
+  if (w === 'T0') return 'BLUE TEAM'; if (w === 'T1') return 'RED TEAM';
+  if (w === NET.me) return NET.callsign; const o = remotes.get(w); return o ? o.label : 'PILOT';
+}
+const iWon = w => !!w && (w === NET.me || (NET.view && NET.view.tm && w === 'T' + NET.view.tm[NET.me]));
+function onPhase(mt) {
+  const me = NET.me, inPl = mt.pl.includes(me), key = mt.mid + ':' + mt.r;
+  if (mt.ph === 'wait') { if (state !== 'mlobby') { enterWaitRoom(); radio('NIGHTJAR', '待機室に戻った。次の対戦の準備をしろ。', 3.5); } return; }
+  if (mt.ph === 'count' || mt.ph === 'fight') {
+    $('#mroom').hidden = true; $('#touch').hidden = !isTouch; if (state === 'mlobby') { state = 'play'; setGuide(opts.guide); }
+    if (inPl && NET.spawnKey !== key) { NET.spawnKey = key; spawnForRound(mt); }
+    else if (!inPl && NET.spawnKey !== key) { NET.spawnKey = key; player.alive = false; player.mesh.visible = false; showMsg('SPECTATING', HUDD, 2); }
+    if (mt.ph === 'count') { showMsg(`ROUND ${mt.r}`, HUDC, 3, true); if (mt.r === 1) radio('NIGHTJAR', mt.mode === 'team' ? 'チーム戦開始。味方と連携して敵チームを全滅させろ。' : 'バトルロイヤル開始。最後まで飛んでいた者が勝者だ。', 4, true); }
+    else { player.frozen = false; showMsg('FIGHT!', AMBER, 1.6, true); sfxTone(440, 880, .4, .2, 'sawtooth'); }
+    return;
+  }
+  if (mt.ph === 'rend') { const n = winnerName(mt.win);
+    showMsg(mt.win ? (iWon(mt.win) ? 'ROUND WIN' : `ROUND → ${n}`) : 'DRAW', iWon(mt.win) ? AMBER : HUDC, 4, true);
+    radio('NIGHTJAR', mt.win ? `ラウンド${mt.r}、勝者は ${n}。` : `ラウンド${mt.r}は引き分けだ。`, 3.5, true); return; }
+  if (mt.ph === 'end') { const n = winnerName(mt.win);
+    showMsg(iWon(mt.win) ? 'VICTORY' : mt.win ? `WINNER ${n}` : 'MATCH OVER', iWon(mt.win) ? AMBER : HUDC, 7, true);
+    radio('NIGHTJAR', iWon(mt.win) ? '対戦勝利だ、見事だったぞ！' : mt.win ? `対戦終了。勝者は ${n}。` : '対戦終了。', 5, true); }
+}
+function matchTick(dt) {
+  if (!NET.me) return;
+  const amL = roster()[0] === NET.me;
+  if (amL) { if (!NET.mt) NET.mt = NET.lastMt ? JSON.parse(JSON.stringify(NET.lastMt)) : { s: 1, ph: 'wait', r: 0, rl: 0, pl: [], tm: null, w: {}, mode: NET.mode, win: '', mid: '' }; leaderStep(dt); }
+  else NET.mt = null;
+  const lead = amL ? null : remotes.get(roster()[0]);
+  const mt = amL ? NET.mt : lead && lead.mt;
+  if (!mt) return;
+  NET.view = mt; NET.lastMt = mt;
+  if (mt.s !== NET.mtSeen) { NET.mtSeen = mt.s; NET.curPh = mt.ph; onPhase(mt); }
+}
+const MROOM = { t: 0 };
+function updateMroomUI(force) {
+  const now = performance.now(); if (!force && now - MROOM.t < 200) return; MROOM.t = now;
+  const mt = NET.view, lead = roster()[0], amL = lead === NET.me, list = roster();
+  $('#mrCode').textContent = 'ROOM ' + NET.name.replace(/^sky-/, '').toUpperCase();
+  $('#mrInfo').textContent = `接続: ${NET.via === 'claude' ? 'claude.ai' : NET.via === 'relay' ? 'リレー（' + (NET.broker || '') + '）' : NET.via === 'p2p' ? 'P2P' : 'テスト'}　·　${list.length} / 4 人` + (list.length < 2 ? '　·　相手を待っています。友達には同じルームコードを入れてもらってね' : '');
+  const ul = $('#mrList'); ul.textContent = '';
+  for (const id of list) {
+    const me = id === NET.me, o = remotes.get(id), li = document.createElement('li');
+    const name = me ? NET.callsign : o ? o.label : 'PILOT', rdy = me ? NET.rdy === 1 : !!(o && o.rdy), wins = mt && mt.w ? (mt.w[id] || 0) : 0;
+    const col = PCOL[(me ? NET.color : o ? o.color : 0) % 4];
+    const a = document.createElement('span'); a.textContent = (id === lead ? '★ ' : '') + name + (me ? '（あなた）' : ''); a.style.color = col;
+    const b = document.createElement('span'); b.textContent = rdy ? 'READY' : '待機中'; b.className = rdy ? 'ok' : '';
+    li.append(a, b); ul.append(li);
+  }
+  const m = amL ? NET.mode : (mt ? mt.mode : 'ffa');
+  document.querySelectorAll('#mrModeRow [data-mode]').forEach(btn => { btn.classList.toggle('on', btn.dataset.mode === m); btn.disabled = !amL; });
+  $('#mrRule').textContent = (m === 'team' ? 'チーム戦：青チームと赤チームに分かれて戦う（味方は撃てない）。' : '個人戦：全員が敵のバトルロイヤル。') + '3ラウンド制で先に2ラウンド取ったら勝ち。撃墜されたらそのラウンドは観戦。' + (amL ? '' : '　ルール選択は★の人ができる。');
+  $('#readyBtn').textContent = NET.rdy ? '準備OK を取り消す' : '準備OK';
+  $('#readyBtn').classList.toggle('ghost', !!NET.rdy);
 }
 function netDie(reason, killer) {
   const P = player; P.alive = false; P.mesh.visible = false; explode(P.pos, 1.8); spawnDebris(P.pos, P.vel, 10); gunFiring = false; post.first = true;
-  NET.deaths++; NET.deathSeq++; NET.killedBy = killer || null; NET.respawnT = 4;
+  NET.deaths++; NET.deathSeq++; NET.killedBy = killer || null;
   const k = killer && remotes.get(killer); NET.killerName = k ? k.label : '';
   showMsg(reason === '墜落' ? 'CRASHED' : 'SHOT DOWN', WARN, 2.5, true);
 }
 function receiveHit(o, d) {
-  if (!player.alive) return;
+  if (!player.alive || !NET.view || NET.view.ph !== 'fight' || isAlly(o)) return;
   player.hp -= clamp(d, 0, 60); shake = Math.max(shake, 1.2); fx.red = 1; showMsg('DAMAGED', WARN, 1.2);
   if (player.hp <= 0) { player.hp = 0; netDie('被撃墜', o.peer); }
 }
@@ -2051,6 +2254,7 @@ function applyRemote(o, pr, updatedAt) {
     o.speed = clamp(numv(pr.s), 0, 700); o.throttle = clamp(numv(pr.th), 0, 1); o.cp = clamp(numv(pr.cp), -1, 1); o.cr = clamp(numv(pr.cr), -1, 1); o.cy = clamp(numv(pr.cy), -1, 1);
     o.recvAt = performance.now();
   }
+  o.rdy = pr.rdy === 1; o.mt = sanitizeMt(pr.mt);
   o.hp = clamp(numv(pr.hp), 0, 100); o.kills = numv(pr.k); o.deaths = numv(pr.dt); o.gun = pr.g === 1;
   const alive = pr.al === 1;
   if (o.alive && !alive) { explode(o.pos, 1.4); spawnDebris(o.pos, o.vel, 8); o.mesh.visible = false; }
@@ -2098,7 +2302,7 @@ function buildPresence() {
   const m = []; for (const ms of missiles) if (ms.owner === 'player' && m.length < 8) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target && ms.target.remote ? ms.target.peer : null]);
   return { v: 1, rm: NET.name, n: NET.callsign, c: NET.color, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
     s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp), al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
-    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-10), fl: NET.flare };
+    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-10), fl: NET.flare, rdy: NET.rdy, mt: NET.mt };
 }
 function netUpdate(dt) {
   const r = NET.room; if (!r) return;
@@ -2114,7 +2318,7 @@ function netUpdate(dt) {
   for (const [peer, o] of remotes) if (!seen.has(peer)) { showMsg(`${o.label} LEFT`, HUDD, 2); removeRemote(o); remotes.delete(peer); }
   for (const o of remotes.values()) stepRemote(o, dt);
   NET.sendT -= dt; if (NET.sendT <= 0) { NET.sendT = .05; try { r.presence(buildPresence()).catch(() => {}); } catch (e) {} }
-  if (!player.alive) { NET.respawnT -= dt; if (NET.respawnT <= 0) respawnPlayer(); }
+  matchTick(dt);
 }
 
 /* ================= main loop ================= */
@@ -2151,9 +2355,10 @@ function frame(t) {
   else timeScale += (1 - timeScale) * Math.min(1, rdt * 6);
   const dt = rdt * timeScale;
   let inp = null;
-  if (state === 'play') inp = update(dt);
+  if (state === 'play' || (state === 'paused' && mode === 'multi')) inp = update(dt);
   else if (state === 'paused') readPad();
-  if (state !== 'paused') {
+  else if (state === 'mlobby') { netUpdate(rdt); updateMroomUI(); }
+  if (state !== 'paused' || mode === 'multi') {
     smoke.update(dt); fire.update(dt); if (state !== 'play') updateEffects(dt);
     flash.intensity *= Math.exp(-rdt * 7);
     water.material.normalMap.offset.x += rdt * .004; water.material.normalMap.offset.y += rdt * .0025;
@@ -2167,7 +2372,7 @@ function frame(t) {
 }
 
 /* ================= screens ================= */
-function pauseGame() { if (state !== 'play') return; state = 'paused'; $('#pause').hidden = false; $('#pauseTime').textContent = fmtTime(timeLeft); if (SND.ctx) SND.ctx.suspend(); $('#resumeBtn').focus(); }
+function pauseGame() { if (state !== 'play') return; state = 'paused'; $('#pause').hidden = false; $('#pauseTime').textContent = mode === 'multi' ? '対戦中は止まりません' : fmtTime(timeLeft); if (SND.ctx && mode !== 'multi') SND.ctx.suspend(); $('#resumeBtn').focus(); }
 function resumeGame() { if (state !== 'paused') return; post.first = true; state = 'play'; $('#pause').hidden = true; if (SND.ctx) SND.ctx.resume(); last = performance.now(); }
 function showResult() {
   setGuide(false, true);
@@ -2184,7 +2389,7 @@ function showResult() {
   if (SND.ctx) ['engG', 'roarG', 'windG', 'lockG', 'alertG', 'warnG', 'gunG'].forEach(k => SND[k].gain.value = 0);
 }
 function toTitle() {
-  netLeave(); mode = 'mission'; $('#tut').hidden = true; $('#lobby').hidden = true; setGuide(false, true);
+  netLeave(); mode = 'mission'; $('#tut').hidden = true; $('#lobby').hidden = true; $('#mroom').hidden = true; setGuide(false, true);
   clearMission(); state = 'title'; $('#result').hidden = true; $('#pause').hidden = true; $('#touch').hidden = true; $('#title').hidden = false;
   player.pos.set(0, 3000, 14500); player.quat.identity(); player.alive = true; player.mesh.visible = true; timeScale = 1;
   player.mesh.userData.pylons.forEach(p => p.visible = true);
@@ -2200,6 +2405,9 @@ $('#lobbyBack').addEventListener('click', () => { netLeave(); $('#lobby').hidden
 $('#tutEnd').addEventListener('click', toTitle);
 $('#tutSortie').addEventListener('click', () => startMission());
 $('#guideBtn').addEventListener('click', () => setGuide(!opts.guide));
+$('#readyBtn').addEventListener('click', () => { NET.rdy = NET.rdy ? 0 : 1; updateMroomUI(true); sfxTone(700, 1050, .1, .06, 'triangle'); });
+document.querySelectorAll('#mrModeRow [data-mode]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.mode = b.dataset.mode; updateMroomUI(true); }));
+$('#mrLeave').addEventListener('click', toTitle);
 $('#resumeBtn').addEventListener('click', resumeGame);
 $('#quitBtn').addEventListener('click', () => { if (SND.ctx) SND.ctx.resume(); toTitle(); });
 $('#retryBtn').addEventListener('click', () => startMission());
@@ -2216,6 +2424,8 @@ function resize() {
   resizePost();
 }
 addEventListener('resize', resize);
+// keep the waiting room alive while the tab is in the background (rAF stops there)
+setInterval(() => { if (document.hidden && state === 'mlobby') { netUpdate(.25); updateMroomUI(); } }, 250);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
 quality = (() => { try { return JSON.parse(localStorage.getItem('skylance-opts') || '{}').quality || 'high'; } catch (e) { return 'high'; } })();
