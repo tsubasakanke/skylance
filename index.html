@@ -2061,11 +2061,13 @@ function mockRoom() {
   return make('lobby');
 }
 function openLobby() {
+  if (NET.room) netLeave();
   $('#title').hidden = true; $('#lobby').hidden = false; lobbyStatus('');
   if (!$('#callsign').value) $('#callsign').value = 'KESTREL-' + (1 + Math.floor(Math.random() * 9));
   $('#quickBtn').disabled = $('#codeBtn').disabled = false;
 }
 async function joinMatch(code) {
+  if (NET.room) netLeave(); // never keep a second presence in an old room
   NET.callsign = ($('#callsign').value || 'PILOT').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12) || 'PILOT';
   try { localStorage.setItem('skylance-opts', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('skylance-opts') || '{}'), { callsign: NET.callsign }))); } catch (e) {}
   $('#quickBtn').disabled = $('#codeBtn').disabled = true; lobbyStatus('接続中…');
