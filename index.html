@@ -112,6 +112,10 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 .segb.on{border-color:var(--hud);background:rgba(141,255,180,.18);color:var(--hud)}
 .segb:focus-visible{outline:2px solid var(--hud);outline-offset:1px}
 .seg.paint .segb{width:38px;height:28px;padding:0;background:linear-gradient(135deg,var(--sw1) 0 62%,var(--sw2) 62%)}
+.seg.paint .segb{color:#fff;font-size:14px;text-shadow:0 1px 2px #000}
+.colors{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px;color:var(--muted)}
+.colors label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.colors input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--hud-dim);background:none;cursor:pointer}
 .seg.paint .segb.on{box-shadow:0 0 0 2px var(--ground),0 0 0 4px var(--hud)}
 .pdesc{font-size:12px!important;color:var(--muted)!important;margin:5px 0 0!important;line-height:1.5!important}
 #hgStats{display:grid;gap:6px;margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--hud-dim)}
@@ -162,7 +166,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
         <div><kbd>Shift</kbd>＋<kbd>Z</kbd>ハイG旋回</div>
         <div><kbd>X</kbd>ロック解除</div>
         <div><kbd>H</kbd>操作ガイド表示</div>
-        <div><kbd>G</kbd>特殊兵装に切替</div>
+        <div><kbd>G</kbd>特殊兵装に切替（レーザーは F 長押し）</div>
         <div><kbd>M</kbd>消音</div>
         <div><kbd>C</kbd>視点切替 / <kbd>P</kbd>ポーズ</div>
       </div>
@@ -485,49 +489,37 @@ function flatPart(points, depth, mat) {
   return new THREE.Mesh(g, mat);
 }
 const pivot = (parent, x, y, z) => { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; };
+// Aircraft builder. o.shape: std (twin-tail fighter) | heavy (std + conformal tanks) | delta (canard delta, single fin)
+// | fsw (forward-swept wing + canards) | wing (B-2 style flying wing). o.armor 0-2, o.eng std|turbo|light, o.sp special-weapon id.
 function makeJet(o) {
-  const g = new THREE.Group();
+  const shape = o.shape || 'std', g = new THREE.Group();
   const body = new THREE.MeshStandardMaterial({ color: o.body, metalness: .4, roughness: .5 });
   const dark = new THREE.MeshStandardMaterial({ color: o.dark, metalness: .35, roughness: .6 });
   const tailM = new THREE.MeshStandardMaterial({ color: o.tail, metalness: .3, roughness: .5 });
   const surf = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.body).multiplyScalar(.82), metalness: .4, roughness: .55 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x0f1d26, metalness: .9, roughness: .08, emissive: 0x0a1820 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x3a3a3c, metalness: .85, roughness: .35 });
-  // fuselage
-  let geo = new THREE.CylinderGeometry(0.8, 1.15, 13, 16); geo.rotateX(-Math.PI / 2);
-  const fus = new THREE.Mesh(geo, body); fus.position.z = 0.5; fus.scale.set(1.12, .8, 1); g.add(fus);
-  geo = new THREE.ConeGeometry(0.8, 4.8, 16); geo.rotateX(-Math.PI / 2);
-  const nose = new THREE.Mesh(geo, dark); nose.position.z = -8.4; nose.scale.set(1.12, .8, 1); g.add(nose);
-  const can = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glass); can.scale.set(.6, .56, 2.2); can.position.set(0, .62, -4.3); g.add(can);
-  const spine = new THREE.Mesh(new THREE.BoxGeometry(1.1, .5, 7), body); spine.position.set(0, .55, 1.5); g.add(spine);
-  const u = { ail: {}, flap: {}, stab: {}, rud: {}, noz: [], flames: [], cores: [], diamonds: [], pylons: [], st: { p: 0, r: 0, y: 0, b: 0, f: 0 } };
-  for (const sx of [-1, 1]) {
-    const intake = new THREE.Mesh(new THREE.BoxGeometry(.9, 1.15, 5.2), dark); intake.position.set(sx * 1.3, -.22, -1.4); g.add(intake);
-    const lip = new THREE.Mesh(new THREE.BoxGeometry(.75, .95, .1), new THREE.MeshBasicMaterial({ color: 0x050607 })); lip.position.set(sx * 1.3, -.22, -4.02); g.add(lip);
-    const side = new THREE.Group(); side.scale.x = sx; g.add(side);
-    // LEX + main wing (trailing edge straight at z=3.6 for hinged surfaces)
-    const lex = flatPart([[0.85, -6.2], [1.6, -2.6], [2.4, -1.0], [0.85, -1.0]], .14, body); lex.position.y = .02; side.add(lex);
-    const wing = flatPart([[0.9, -2.2], [8.0, 2.6], [8.0, 3.6], [0.9, 3.6]], .2, body); wing.position.y = .02; side.add(wing);
-    const fp = pivot(side, 0, .02, 3.6); const flap = new THREE.Mesh(new THREE.BoxGeometry(3.4, .12, .9), surf); flap.position.set(2.95, 0, .45); fp.add(flap);
-    const ap = pivot(side, 0, .02, 3.6); const ail = new THREE.Mesh(new THREE.BoxGeometry(3.0, .1, .75), surf); ail.position.set(6.4, 0, .375); ap.add(ail);
-    u.flap[sx] = fp; u.ail[sx] = ap;
-    // all-moving stabilator
-    const sp = pivot(side, 2.0, 0, 6.4); const stab = flatPart([[-.65, -.9], [2.4, .8], [2.4, 1.6], [-.65, 1.5]], .14, body); sp.add(stab); u.stab[sx] = sp;
-    // canted vertical tail + rudder
-    const fg = pivot(side, 1.0, .46, 3.4); fg.rotation.z = -.32;
-    const finGeo = new THREE.ExtrudeGeometry((() => { const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(2.9, 0); s.lineTo(2.9, 3.3); s.lineTo(2.0, 3.3); s.lineTo(0, 0); return s; })(), { depth: .16, bevelEnabled: false });
-    finGeo.rotateY(-Math.PI / 2); finGeo.translate(.08, 0, 0);
-    fg.add(new THREE.Mesh(finGeo, tailM));
-    const rp = pivot(fg, 0, .15, 2.9); const rud = new THREE.Mesh(new THREE.BoxGeometry(.12, 2.9, .85), tailM); rud.position.set(0, 1.45, .425); rp.add(rud); u.rud[sx] = rp;
-    // nav light
-    const nav = new THREE.Mesh(new THREE.SphereGeometry(.13, 6, 4), new THREE.MeshBasicMaterial({ color: sx < 0 ? new THREE.Color(5, .4, .3) : new THREE.Color(.3, 5, .8) })); nav.position.set(sx * 8.02, .02, 3.1); g.add(nav);
-    // vectoring nozzle with afterburner flame, core and shock diamonds
-    const nz = pivot(g, sx * .62, -.02, 7.0);
+  const plate = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.dark).multiplyScalar(.7), metalness: .6, roughness: .45 });
+  const u = { ail: {}, flap: {}, stab: {}, rud: {}, noz: [], flames: [], cores: [], diamonds: [], pylons: [], st: { p: 0, r: 0, y: 0, b: 0, f: 0 }, fm: 1, canard: shape === 'delta' || shape === 'fsw' };
+  const dummy = () => { const p = new THREE.Group(); g.add(p); return p; };
+  const box = (w, h, d, m, x, y, z, parent = g) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); parent.add(b); return b; };
+  // a control surface hinged along a (possibly swept) line: outer group sets the sweep, inner pivot deflects
+  const hinge = (parent, x, y, z, yaw, w, d, m) => { const o2 = pivot(parent, x, y, z); o2.rotation.y = yaw; const p = pivot(o2, 0, 0, 0); box(w, .1, d, m, 0, 0, d / 2, p); return p; };
+  const fin = (parent, x, y, z, cant, h = 3.3, len = 2.9) => {
+    const fg = pivot(parent, x, y, z); fg.rotation.z = cant;
+    const s2 = new THREE.Shape(); s2.moveTo(0, 0); s2.lineTo(len, 0); s2.lineTo(len, h); s2.lineTo(len - .9, h); s2.lineTo(0, 0);
+    const fgeo = new THREE.ExtrudeGeometry(s2, { depth: .16, bevelEnabled: false }); fgeo.rotateY(-Math.PI / 2); fgeo.translate(.08, 0, 0); fg.add(new THREE.Mesh(fgeo, tailM));
+    const rp = pivot(fg, 0, .15, len); box(.12, h - .4, .85, tailM, 0, (h - .4) / 2, .425, rp); return rp;
+  };
+  const navLight = (x, y, z, left) => { const n = new THREE.Mesh(new THREE.SphereGeometry(.13, 6, 4), new THREE.MeshBasicMaterial({ color: left ? new THREE.Color(5, .4, .3) : new THREE.Color(.3, 5, .8) })); n.position.set(x, y, z); g.add(n); };
+  const engMul = o.eng === 'turbo' ? 1.22 : o.eng === 'light' ? .84 : 1;
+  const nozzle = (x, y, z, flat = false) => {
+    const nz = pivot(g, x, y, z); nz.scale.setScalar(engMul); if (flat) nz.scale.y *= .45;
     const nzGeo = new THREE.CylinderGeometry(.62, .5, 1.7, 14, 1, true); nzGeo.rotateX(-Math.PI / 2);
-    const nozzle = new THREE.Mesh(nzGeo, metal); nozzle.material.side = THREE.DoubleSide; nozzle.position.z = .85; nz.add(nozzle);
+    const nm = new THREE.Mesh(nzGeo, metal); nm.material.side = THREE.DoubleSide; nm.position.z = .85; nz.add(nm);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(.5, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 1.0, .35) })); disc.position.z = 1.2; nz.add(disc);
     const flameGeo = new THREE.ConeGeometry(.46, 4.5, 12, 1, true); flameGeo.rotateX(Math.PI / 2); flameGeo.translate(0, 0, 2.25);
-    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.1, .4), transparent: true, opacity: .7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: o.eng === 'turbo' ? new THREE.Color(2.6, 1.6, 2.2) : new THREE.Color(2.4, 1.1, .4), transparent: true, opacity: .7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     flame.position.z = 1.65; nz.add(flame);
     const coreGeo = new THREE.ConeGeometry(.3, 2.4, 10, 1, true); coreGeo.rotateX(Math.PI / 2); coreGeo.translate(0, 0, 1.2);
     const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.6, 4.0), transparent: true, opacity: .8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
@@ -535,18 +527,84 @@ function makeJet(o) {
     for (let i = 0; i < 3; i++) { const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(3.5, 2.4, 1.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
       d.position.z = 2.3 + i * .95; d.scale.setScalar(.9 - i * .18); nz.add(d); u.diamonds.push(d); }
     u.noz.push(nz); u.flames.push(flame); u.cores.push(core);
-    // pylons: inner (with strut) and wingtip rail
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(.12, .34, 1.5), dark); strut.position.set(3.6, -.18, 1.9); side.add(strut);
-    const tip = flatPart([[7.95, 2.4], [8.3, 2.4], [8.3, 3.7], [7.95, 3.7]], .16, body); tip.position.y = .02; side.add(tip);
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(.14, .16, 2.2), dark); rail.position.set(8.3, -.1, 2.7); side.add(rail);
-    for (const [px, py, pz] of [[8.3, -.33, 2.6], [3.6, -.56, 1.9]]) { const m = makeMissileMesh(); m.position.set(sx * px, py, pz); g.add(m); u.pylons.push(m); }
+  };
+  const missileAt = (x, y, z) => { const m = makeMissileMesh(); m.position.set(x, y, z); g.add(m); u.pylons.push(m); };
+
+  if (shape === 'wing') {
+    // ---- flying wing: sawtooth trailing edge, buried engines, no tails
+    const hump = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), body); hump.scale.set(2.4, .95, 7.2); hump.position.set(0, .25, -.6); g.add(hump);
+    const can = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), glass); can.scale.set(1.1, .42, 1.3); can.position.set(0, .95, -4.4); g.add(can);
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Group(); side.scale.x = sx; g.add(side);
+      const w = flatPart([[0, -8], [13, 3.4], [13, 4.4], [10.4, 6.2], [8, 4.6], [5.4, 6.4], [2.8, 4.6], [0, 6.2]], .7, body); side.add(w);
+      u.ail[sx] = hinge(side, 11.7, 0, 5.3, .606, 2.6, .8, surf);
+      u.flap[sx] = hinge(side, 6.7, 0, 5.5, .606, 2.6, .8, surf);
+      box(1.6, .7, 5.5, body, 2.4, .65, 1.5, side); // engine hump
+      navLight(sx * 13, .1, 3.9, sx < 0);
+      nozzle(sx * 2.4, .7, 4.3, true);
+      missileAt(sx * 4.2, -.55, 1.4); missileAt(sx * 6.4, -.5, 2.4);
+    }
+    u.stab[1] = dummy(); u.stab[-1] = dummy(); u.rud[1] = dummy(); u.rud[-1] = dummy(); u.brake = dummy(); u.fm = .55;
+    u.pylons = [u.pylons[1], u.pylons[3], u.pylons[0], u.pylons[2]];
+  } else {
+    // ---- conventional fuselage
+    const big = shape === 'heavy' ? 1.12 : 1;
+    let geo = new THREE.CylinderGeometry(0.8, 1.15, 13, 16); geo.rotateX(-Math.PI / 2);
+    const fus = new THREE.Mesh(geo, body); fus.position.z = 0.5; fus.scale.set(1.12 * big, .8 * big, 1); g.add(fus);
+    geo = new THREE.ConeGeometry(0.8, 4.8, 16); geo.rotateX(-Math.PI / 2);
+    const nose = new THREE.Mesh(geo, dark); nose.position.z = -8.4; nose.scale.set(1.12 * big, .8 * big, 1); g.add(nose);
+    const can = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glass); can.scale.set(.6, .56, shape === 'heavy' ? 2.9 : 2.2); can.position.set(0, .62, shape === 'heavy' ? -4.0 : -4.3); g.add(can);
+    box(1.1, .5, 7, body, 0, .55, 1.5);
+    for (const sx of [-1, 1]) {
+      box(.9, 1.15, 5.2, dark, sx * 1.3 * big, -.22, -1.4);
+      box(.75, .95, .1, new THREE.MeshBasicMaterial({ color: 0x050607 }), sx * 1.3 * big, -.22, -4.02);
+      const side = new THREE.Group(); side.scale.x = sx; g.add(side);
+      if (shape === 'delta') {
+        side.add(flatPart([[0.9, -4.2], [6.8, 3.0], [6.8, 3.6], [0.9, 3.6]], .2, body));
+        u.flap[sx] = hinge(side, 2.3, .02, 3.6, 0, 2.6, .8, surf); u.ail[sx] = hinge(side, 5.2, .02, 3.6, 0, 2.8, .7, surf);
+        u.stab[sx] = pivot(side, 1.35, .3, -5.2); u.stab[sx].add(flatPart([[-.2, -.7], [1.7, .2], [1.7, .6], [-.2, .7]], .1, body)); // canard
+        navLight(sx * 6.8, .02, 3.3, sx < 0); missileAt(sx * 6.6, -.3, 2.4); missileAt(sx * 3.4, -.5, 1.4);
+      } else if (shape === 'fsw') {
+        side.add(flatPart([[0.9, -1.4], [7.6, -3.4], [7.6, -2.3], [0.9, 3.6]], .2, body));
+        side.add(flatPart([[0.85, -6.2], [1.6, -2.6], [2.2, -1.4], [0.85, -1.4]], .14, body));
+        u.ail[sx] = hinge(side, 6.0, .02, -1.25, .71, 2.4, .7, surf); u.flap[sx] = hinge(side, 2.9, .02, 1.45, .71, 2.4, .8, surf);
+        u.stab[sx] = pivot(side, 1.4, .3, -5.6); u.stab[sx].add(flatPart([[-.2, -.6], [1.9, .1], [1.9, .6], [-.2, .7]], .1, body)); // canard
+        u.rud[sx] = fin(side, 1.0, .46, 3.6, -.38, 3.0, 2.7);
+        const tail = flatPart([[0.8, 5.4], [3.2, 7.2], [3.2, 8.0], [0.8, 8.0]], .14, body); side.add(tail);
+        navLight(sx * 7.6, .02, -2.6, sx < 0); missileAt(sx * 6.2, -.35, -1.6); missileAt(sx * 3.2, -.5, 1.2);
+      } else {
+        side.add(flatPart([[0.85, -6.2], [1.6, -2.6], [2.4, -1.0], [0.85, -1.0]], .14, body));
+        side.add(flatPart([[0.9, -2.2], [8.0, 2.6], [8.0, 3.6], [0.9, 3.6]], .2, body));
+        u.flap[sx] = hinge(side, 2.95, .02, 3.6, 0, 3.4, .9, surf); u.ail[sx] = hinge(side, 6.4, .02, 3.6, 0, 3.0, .75, surf);
+        u.stab[sx] = pivot(side, 2.0, 0, 6.4); u.stab[sx].add(flatPart([[-.65, -.9], [2.4, .8], [2.4, 1.6], [-.65, 1.5]], .14, body));
+        u.rud[sx] = fin(side, 1.0, .46, 3.4, -.32);
+        side.add(flatPart([[7.95, 2.4], [8.3, 2.4], [8.3, 3.7], [7.95, 3.7]], .16, body));
+        box(.14, .16, 2.2, dark, 8.3, -.1, 2.7, side); box(.12, .34, 1.5, dark, 3.6, -.18, 1.9, side);
+        navLight(sx * 8.02, .02, 3.1, sx < 0); missileAt(sx * 8.3, -.33, 2.6); missileAt(sx * 3.6, -.56, 1.9);
+        if (shape === 'heavy') box(.95, .85, 7.5, body, 1.75, -.05, .4, side); // conformal fuel tanks
+      }
+      nozzle(sx * .62 * big, -.02, 7.0);
+    }
+    if (shape === 'delta') { u.rud[1] = fin(g, .08, .5, 2.6, 0, 3.8, 3.4); u.rud[-1] = dummy(); }
+    u.pylons = [u.pylons[0], u.pylons[2], u.pylons[1], u.pylons[3]];
+    const sb = pivot(g, 0, .82, -.3); box(1.25, .07, 2.1, surf, 0, 0, 1.05, sb); u.brake = sb;
   }
-  // order pylons: L-outer, R-outer, L-inner, R-inner
-  u.pylons = [u.pylons[0], u.pylons[2], u.pylons[1], u.pylons[3]];
-  // dorsal speed brake
-  const sb = pivot(g, 0, .82, -.3); const brake = new THREE.Mesh(new THREE.BoxGeometry(1.25, .07, 2.1), surf); brake.position.set(0, 0, 1.05); sb.add(brake); u.brake = sb;
-  // gun muzzle flash
-    const mf = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(5, 3.6, 1.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  // ---- armour kit: bolted plates
+  if (o.armor >= 1) { for (const sx of [-1, 1]) { if (shape === 'wing') box(2.4, .25, 3.2, plate, sx * 5.5, .45, 1.2); else box(.18, .9, 6.5, plate, sx * 1.15, .05, -1.2); } }
+  if (o.armor >= 2) { for (const sx of [-1, 1]) { if (shape === 'wing') box(2, .25, 2.6, plate, sx * 9, .45, 2.8); else { box(2.2, .14, 1.6, plate, sx * 4.4, -.2, 1.2); box(.2, .7, 3, plate, sx * .9, .55, 2.6); } }
+    box(shape === 'wing' ? 3 : 1.7, .2, 2.2, plate, 0, shape === 'wing' ? .9 : -.75, -2.8); }
+  // ---- special weapon kit (visible stores)
+  const spm = new THREE.MeshStandardMaterial({ color: 0x55595e, metalness: .6, roughness: .45 });
+  const belly = shape === 'wing' ? -.55 : -.95;
+  if (o.sp === 'rkt') for (const sx of [-1, 1]) { const gg = new THREE.CylinderGeometry(.42, .42, 2.6, 8); gg.rotateX(-Math.PI / 2); const pd = new THREE.Mesh(gg, spm); pd.position.set(sx * 2.2, belly, -.6); g.add(pd);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(.4, 8), new THREE.MeshBasicMaterial({ color: 0x111111 })); face.position.set(sx * 2.2, belly, -1.92); face.rotation.y = Math.PI; g.add(face); }
+  else if (o.sp === 'ugb') for (const sx of [-1, 1]) { const gg = new THREE.CylinderGeometry(.32, .32, 2.2, 10); gg.rotateX(-Math.PI / 2); const bm = new THREE.Mesh(gg, new THREE.MeshStandardMaterial({ color: 0x4d5a3c, roughness: .6 })); bm.position.set(sx * 1.9, belly, .4); g.add(bm); }
+  else if (o.sp === 'tls') { const gg = new THREE.CylinderGeometry(.38, .45, 3.2, 12); gg.rotateX(-Math.PI / 2); const pd = new THREE.Mesh(gg, spm); pd.position.set(0, belly, -2.4); g.add(pd);
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(.34, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(5, .6, .5) })); lens.position.set(0, belly, -4.0); g.add(lens); }
+  else if (o.sp === 'eml') { const gg = new THREE.BoxGeometry(.5, .4, 7.5); const rl = new THREE.Mesh(gg, spm); rl.position.set(0, belly, -2.2); g.add(rl);
+    const coil = new THREE.Mesh(new THREE.BoxGeometry(.56, .1, 5.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(.6, 2.4, 5) })); coil.position.set(0, belly + .25, -2.2); g.add(coil); }
+  else if (o.sp) for (const sx of [-1, 1]) { const m = makeMissileMesh(); m.position.set(sx * .75, belly, .2); m.scale.setScalar(.9); g.add(m); }
+  const mf = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(5, 3.6, 1.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   mf.position.set(.95, .35, -6.3); mf.scale.setScalar(2.2); mf.visible = false; g.add(mf); u.muzzle = mf;
   g.userData = u;
   return g;
@@ -555,19 +613,22 @@ function makeJet(o) {
 function animateJet(j, pitch, roll, yaw, brake, flapAmt, throttle, dt, t) {
   const u = j.userData, k = 1 - Math.exp(-dt * 14), s = u.st;
   s.p += (pitch - s.p) * k; s.r += (roll - s.r) * k; s.y += (yaw - s.y) * k; s.b += (brake - s.b) * (1 - Math.exp(-dt * 4)); s.f += (flapAmt - s.f) * (1 - Math.exp(-dt * 3));
-  u.ail[1].rotation.x = -s.r * .45; u.ail[-1].rotation.x = s.r * .45;
-  u.flap[1].rotation.x = s.f * .5 - s.r * .14; u.flap[-1].rotation.x = s.f * .5 + s.r * .14;
-  u.stab[1].rotation.x = -s.p * .32 - s.r * .16; u.stab[-1].rotation.x = -s.p * .32 + s.r * .16;
+  // flying wing: elevons mix pitch and roll
+  const elev = u.fm < 1 ? -s.p * .35 : 0;
+  u.ail[1].rotation.x = -s.r * .45 + elev; u.ail[-1].rotation.x = s.r * .45 + elev;
+  u.flap[1].rotation.x = s.f * .5 - s.r * .14 + elev; u.flap[-1].rotation.x = s.f * .5 + s.r * .14 + elev;
+  const sp = u.canard ? s.p * .4 : -s.p * .32;
+  u.stab[1].rotation.x = sp - s.r * .16; u.stab[-1].rotation.x = sp + s.r * .16;
   u.rud[1].rotation.y = s.y * .35 + s.b * .15; u.rud[-1].rotation.y = -s.y * .35 + s.b * .15;
   u.brake.rotation.x = -s.b * .8;
   const ab = smooth(.72, .95, throttle), flick = .9 + Math.sin(t * 60) * .05 + Math.random() * .08;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < u.noz.length; i++) {
     u.noz[i].rotation.x = -s.p * .14;
-    u.flames[i].scale.set(.75 + ab * .3, .75 + ab * .3, (.25 + throttle * .5 + ab * 1.1) * flick);
+    u.flames[i].scale.set(.75 + ab * .3, .75 + ab * .3, (.25 + throttle * .5 + ab * 1.1) * flick * u.fm);
     u.flames[i].material.opacity = .25 + ab * .6;
-    u.cores[i].scale.set(1, 1, (.4 + ab * .9) * flick); u.cores[i].visible = throttle > .35;
-      }
-  u.diamonds.forEach(d => { d.visible = ab > .5; });
+    u.cores[i].scale.set(1, 1, (.4 + ab * .9) * flick * u.fm); u.cores[i].visible = throttle > .35;
+  }
+  u.diamonds.forEach(d => { d.visible = ab > .5 && u.fm >= 1; });
 }
 function makeSAM(mat) {
   const g = new THREE.Group();
@@ -815,7 +876,7 @@ function setMute(m) { SND.muted = m; if (SND.master) SND.master.gain.value = m ?
 
 /* ================= input ================= */
 const keys = {};
-const touch = { pitch: 0, roll: 0, boost: false, brake: false, gun: false };
+const touch = { pitch: 0, roll: 0, boost: false, brake: false, gun: false, fire: false };
 let invert = false, padPrev = [];
 addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -845,7 +906,7 @@ function readPad() {
   out.roll = dz(p.axes[0] || 0); out.pitch = dz(p.axes[1] || 0); out.yaw = dz(p.axes[2] || 0) * .8;
   const b = i => p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > .4);
   if (b(4)) out.yaw = -1; if (b(5)) out.yaw = 1;
-  out.boost = b(7); out.brake = b(6); out.gun = b(2); out.look = b(3);
+  out.boost = b(7); out.brake = b(6); out.gun = b(2); out.look = b(3); out.fire = b(0);
   const edge = i => b(i) && !padPrev[i];
   if (state === 'play' && player.alive) { if (edge(0)) playerFireMissile(); if (edge(12)) switchWeapon(); if (edge(3)) cycleTarget(); if (edge(1)) deployFlares(); if (edge(8)) { camView = (camView + 1) % 2; post.first = true; } }
   if (edge(9)) { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }
@@ -865,7 +926,8 @@ function readInput() {
     boost: !!(keys.ShiftLeft || keys.ShiftRight || pad.boost || touch.boost),
     brake: !!(keys.KeyZ || pad.brake || touch.brake),
     gun: !!(keys.Space || pad.gun || touch.gun),
-    look: !!(keys.KeyT || pad.look)
+    look: !!(keys.KeyT || pad.look),
+    fire: !!(keys.KeyF || keys.KeyJ || pad.fire || touch.fire)
   };
 }
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -883,7 +945,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
     e.preventDefault(); const a = b.dataset.act;
     if (a === 'pause') { if (state === 'play') pauseGame(); return; }
     if (state !== 'play' || !player.alive) return;
-    if (a === 'weapon') switchWeapon(); else if (a === 'missile') playerFireMissile(); else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
+    if (a === 'weapon') switchWeapon(); else if (a === 'missile') { touch.fire = true; playerFireMissile(); } else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
   }));
 })();
 
@@ -893,9 +955,11 @@ const LOCK_TIME = 0.45, PYLON_RELOAD = 3.4;
 /* ---- assemble: parts catalogue. Weight of the fitted parts must stay within the frame's capacity. ---- */
 const PARTS = {
   frame: [
-    { id: 'striker', n: 'STRIKER', d: 'バランスのとれた主力機。迷ったらこれ', hp: 1, turn: 1, spd: 1, cap: 100, sc: [1, 1, 1] },
-    { id: 'interceptor', n: 'INTERCEPTOR', d: '軽くて速い高機動機。装甲は薄い', hp: .75, turn: 1.14, spd: 1.1, cap: 80, sc: [.9, .95, 1.04] },
-    { id: 'fortress', n: 'FORTRESS', d: '重装甲の大型機。旋回は重いがとにかく硬い', hp: 1.45, turn: .84, spd: .93, cap: 140, sc: [1.16, 1.12, 1.1] }],
+    { id: 'striker', n: 'STRIKER', d: 'バランスのとれた主力機。迷ったらこれ', hp: 1, turn: 1, spd: 1, cap: 100, sc: [1, 1, 1], shape: 'std' },
+    { id: 'interceptor', n: 'INTERCEPTOR', d: 'カナード付きデルタ翼の高速機。装甲は薄い', hp: .75, turn: 1.14, spd: 1.1, cap: 80, sc: [.95, .95, 1.04], shape: 'delta' },
+    { id: 'fortress', n: 'FORTRESS', d: '重装甲の大型機。旋回は重いがとにかく硬い', hp: 1.45, turn: .84, spd: .93, cap: 140, sc: [1.16, 1.12, 1.1], shape: 'heavy' },
+    { id: 'spectre', n: 'SPECTRE', d: '全翼ステルス機。敵ミサイルの追尾が鈍る。積載にも余裕', hp: .9, turn: .9, spd: 1, cap: 115, sc: [1, 1, 1], shape: 'wing', stealth: true },
+    { id: 'raptor', n: 'RAPTOR', d: '前進翼の格闘戦機。旋回性能がずば抜けて高い', hp: .85, turn: 1.25, spd: 1.03, cap: 90, sc: [1, 1, 1], shape: 'fsw' }],
   engine: [
     { id: 'std', n: 'F110 標準', d: 'クセのない標準エンジン', thr: 1, w: 30 },
     { id: 'turbo', n: 'TURBOFAN-X', d: '加速もアフターバーナーも強力。ただし重い', thr: 1.14, w: 45 },
@@ -903,10 +967,15 @@ const PARTS = {
   special: [
     { id: 'qaam', n: 'QAAM', d: '高機動ミサイル。射程は短いが急旋回で追いかける', w: 30, ammo: 18, cd: 1.2, range: 3600, cone: .6, lock: .35, turn: 4.2, spd: 720, acc: 450, life: 6.5, vd: 34 },
     { id: 'hvaa', n: 'HVAA', d: '超高速・長射程ミサイル。曲がりにくいので正面から', w: 25, ammo: 16, cd: 2, range: 8000, cone: .32, lock: .9, turn: 1.25, spd: 1150, acc: 750, life: 9, vd: 46 },
-    { id: '4aam', n: '4AAM', d: '最大4目標を同時ロックして一斉発射', w: 40, ammo: 12, cd: 3.2, range: 5000, cone: .62, lock: .25, turn: 2.4, spd: 780, acc: 400, life: 9, vd: 30, multi: 4 }],
+    { id: '4aam', n: '4AAM', d: '最大4目標を同時ロックして一斉発射', w: 40, ammo: 12, cd: 3.2, range: 5000, cone: .62, lock: .25, turn: 2.4, spd: 780, acc: 400, life: 9, vd: 30, multi: 4 },
+    { id: 'rkt', n: 'RKT', d: 'ロケット8発を一斉発射。無誘導だが近距離で強烈', w: 25, ammo: 14, cd: 1.2, range: 2500, cone: .2, lock: 99, vd: 14, kind: 'rocket' },
+    { id: 'ugb', n: 'UGB', d: '無誘導爆弾。爆風で周りの敵や地上施設をまとめて吹き飛ばす', w: 30, ammo: 16, cd: .8, range: 3000, cone: .3, lock: 99, vd: 30, kind: 'bomb' },
+    { id: 'tls', n: 'TLS', d: '押しっぱなしで照射する戦術レーザー。照準に重ねて焼き切る（エネルギー20秒）', w: 45, ammo: 20, cd: 0, range: 3500, cone: .08, lock: 99, vd: 45, kind: 'laser' },
+    { id: 'eml', n: 'EML', d: 'レールガン。超高速弾が一直線に貫く。照準をしっかり合わせて', w: 40, ammo: 14, cd: 1.4, range: 7000, cone: .05, lock: 99, vd: 80, kind: 'rail' }],
   gun: [
-    { id: 'm61', n: 'M61 20mm', d: '連射速度が高く当てやすい', w: 10, rate: 26, dmg: 9, vd: 5 },
-    { id: 'gau', n: 'GAU 30mm', d: '連射は遅いが一発が重い', w: 20, rate: 14, dmg: 20, vd: 11 }],
+    { id: 'm61', n: 'M61 20mm', d: '連射速度が高い標準機関砲', w: 10, rate: 26, dmg: 9, vd: 5, spd: 1300 },
+    { id: 'gau', n: 'GAU 30mm', d: '連射は遅いが一発が重い', w: 20, rate: 14, dmg: 20, vd: 11, spd: 1150 },
+    { id: 'pulse', n: 'PULSE', d: 'パルスレーザー機関砲。弾がほぼ一瞬で届くのでとても当てやすい', w: 25, rate: 18, dmg: 12, vd: 6, spd: 2600 }],
   armor: [
     { id: 'none', n: 'なし', d: '追加装甲なし', w: 0, hp: 0, turn: 0 },
     { id: 'a1', n: '追加装甲 I', d: '耐久 +15%／旋回 -3%', w: 20, hp: .15, turn: -.03 },
@@ -914,16 +983,21 @@ const PARTS = {
   paint: [
     { n: 'GRAY GHOST', body: 0x9aa5ae, dark: 0x5f6870, tail: 0x2d4a6a }, { n: 'DESERT', body: 0xb9a882, dark: 0x7a6a4a, tail: 0x8a4a1c },
     { n: 'NAVY', body: 0x5a6f8c, dark: 0x2e3a4c, tail: 0xd8d8d8 }, { n: 'CRIMSON', body: 0x8c3a3a, dark: 0x3a2020, tail: 0x1a1a1a },
-    { n: 'ARCTIC', body: 0xdfe6ea, dark: 0x9aa5ae, tail: 0x2d7ab8 }, { n: 'NIGHT', body: 0x26282d, dark: 0x15161a, tail: 0xd9b229 }]
+    { n: 'ARCTIC', body: 0xdfe6ea, dark: 0x9aa5ae, tail: 0x2d7ab8 }, { n: 'NIGHT', body: 0x26282d, dark: 0x15161a, tail: 0xd9b229 }, { n: 'CUSTOM', custom: true }]
 };
-const LO = { frame: 0, engine: 0, special: 0, gun: 0, armor: 0, paint: 0 };
-try { const sv = JSON.parse(localStorage.getItem('skylance-loadout') || '{}'); for (const k in LO) if (Number.isInteger(sv[k]) && PARTS[k][sv[k]]) LO[k] = sv[k]; } catch (e) {}
+const LO = { frame: 0, engine: 0, special: 0, gun: 0, armor: 0, paint: 0, custom: { body: '#9aa5ae', dark: '#5f6870', tail: '#2d4a6a' } };
+const HEX = /^#[0-9a-f]{6}$/i;
+try { const sv = JSON.parse(localStorage.getItem('skylance-loadout') || '{}'); for (const k in LO) if (k !== 'custom' && Number.isInteger(sv[k]) && PARTS[k][sv[k]]) LO[k] = sv[k];
+  if (sv.custom) for (const c of ['body', 'dark', 'tail']) if (HEX.test(sv.custom[c] || '')) LO.custom[c] = sv.custom[c]; } catch (e) {}
+const saveLoadout = () => { try { localStorage.setItem('skylance-loadout', JSON.stringify(LO)); } catch (e) {} };
+function paintColors() { const p = part('paint'); return p.custom ? { body: parseInt(LO.custom.body.slice(1), 16), dark: parseInt(LO.custom.dark.slice(1), 16), tail: parseInt(LO.custom.tail.slice(1), 16) } : { body: p.body, dark: p.dark, tail: p.tail }; }
+function lookParams() { const c = paintColors(); return { shape: part('frame').shape, body: c.body, dark: c.dark, tail: c.tail, armor: LO.armor, eng: part('engine').id, sp: part('special').id }; }
 const part = k => PARTS[k][LO[k]];
 function loadWeight() { return part('engine').w + part('special').w + part('gun').w + part('armor').w; }
 const overweight = () => loadWeight() > part('frame').cap;
 function stats() {
   const f = part('frame'), a = part('armor'), e = part('engine'), g = part('gun');
-  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd, thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, sp: part('special') };
+  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd, thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, gunSpd: g.spd || 1300, sp: part('special'), stealth: !!f.stealth };
 }
 let ST = stats();
 // base HP per mode: versus lasts much longer than the solo campaign
@@ -934,9 +1008,9 @@ function refreshLoadout() {
   return player.maxHp;
 }
 function rebuildPlayerMesh() {
-  const pt = part('paint'), sc = part('frame').sc, vis = player.mesh ? player.mesh.visible : true;
+  const sc = part('frame').sc, vis = player.mesh ? player.mesh.visible : true;
   if (player.mesh) scene.remove(player.mesh);
-  player.mesh = makeJet({ body: pt.body, dark: pt.dark, tail: pt.tail }); player.mesh.scale.set(sc[0], sc[1], sc[2]); player.mesh.visible = vis; scene.add(player.mesh);
+  player.mesh = makeJet(lookParams()); player.mesh.scale.set(sc[0], sc[1], sc[2]); player.mesh.visible = vis; scene.add(player.mesh);
 }
 let curTarget = null, lockT = 0, locked = false, alertLevel = 0, lockWarn = false, gunTimer = 0, gunFiring = false, radioCooldown = 0, outTimer = 0;
 let timeScale = 1, slowmoT = 0, lastKillT = -99, chain = 0;
@@ -1186,6 +1260,7 @@ function launchMissile(pylonMesh, startPos, dir, speed, target, owner, upVec, dr
   const m = { pos, prev: pos.clone(), dir: vel.clone().normalize(), vel, speed: vel.length(), target, owner, mesh, exh, life: owner === 'player' ? 9.5 : 11.5, age: 0,
     turn: owner === 'player' ? 2.5 : 1.55, maxSpeed: owner === 'player' ? 780 : 640, alive: true, ignite: dropT, lit: dropT <= 0, skip: owner === 'enemy' && !!pylonMesh };
   if (pylonMesh) pylonMesh.getWorldQuaternion(m.mesh.quaternion); else m.mesh.quaternion.setFromUnitVectors(NEG_Z, m.dir);
+  if (owner === 'enemy' && target === player && ST.stealth) m.turn *= .72;
   if (owner === 'player' || mode === 'multi') m.nid = ++NET.mid;
   if (m.lit) ignite(m);
   missiles.push(m);
@@ -1211,8 +1286,25 @@ function weaponParams(t) {
 }
 function fireSpecial() {
   const P = player, sp = ST.sp;
+  if (sp.kind === 'laser') return; // held trigger, handled every frame
   if (P.sp <= 0) { showMsg('NO SP AMMO', WARN); return; }
   if (P.spCd > 0) return;
+  if (sp.kind === 'rocket') {
+    P.sp--; P.spCd = sp.cd;
+    for (let k = 0; k < 8; k++) {
+      _v1.set((k % 2 ? 1 : -1) * 2.2 + rand(-.3, .3), -1 + rand(-.2, .2), -1.5).applyQuaternion(P.quat).add(P.pos);
+      _v2.copy(P.fwd).add(_v3.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(.018)).normalize();
+      const m = launchMissile(null, _v1, _v2, P.speed + 60, null, 'player', P.up, 0, _v2.clone().multiplyScalar(P.speed + 60), 0);
+      Object.assign(m, { turn: 0, maxSpeed: P.speed + 950, acc: 1500, life: 3.2, dmg: 60, vdmg: sp.vd, rocket: true }); m.mesh.scale.setScalar(.55);
+    }
+    sfxNoise(.7, 1600, .55, 'bandpass', 400); shake = Math.max(shake, .3); return;
+  }
+  if (sp.kind === 'bomb') {
+    P.sp--; P.spCd = sp.cd; _v1.set(0, -1.6, 0).applyQuaternion(P.quat).add(P.pos);
+    const m = launchMissile(null, _v1, P.fwd, P.speed, null, 'player', P.up, 999, P.vel, 3);
+    Object.assign(m, { bomb: true, life: 40, dmg: 260, vdmg: sp.vd }); m.mesh.scale.set(2, 2, .8); return;
+  }
+  if (sp.kind === 'rail') { P.sp--; P.spCd = sp.cd; fireRail(); return; }
   const targets = sp.multi ? P.mlocks.filter(t => t.alive) : [locked ? curTarget : null];
   if (sp.multi && !targets.length) { showMsg('NO LOCK', HUDD, .8); return; }
   P.sp--; P.spCd = sp.cd;
@@ -1222,6 +1314,41 @@ function fireSpecial() {
     Object.assign(m, { turn: sp.turn, maxSpeed: sp.spd, acc: sp.acc, life: sp.life, dmg: 100, vdmg: sp.vd });
   });
   P.mlocks = [];
+}
+// thin additive beams for the railgun shot and the laser
+const beamGeo = (() => { const g = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true); g.rotateX(Math.PI / 2); g.translate(0, 0, .5); return g; })();
+function makeBeam(col) { const m = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false })); m.visible = false; m.frustumCulled = false; scene.add(m); return m; }
+function placeBeam(m, a, b, r) { m.position.copy(a); m.lookAt(b); m.scale.set(r, r, Math.max(1, a.distanceTo(b))); m.visible = true; }
+const railBeams = []; const laser = { on: false, tick: 0, mesh: null, glow: null };
+// first target whose body the ray (start, dir) passes through, within range; returns [target, distance]
+function rayHit(start, dir, range, slack) {
+  let best = null, bd = range;
+  for (const t of aliveTargets()) { _v2.subVectors(t.pos, start); const along = _v2.dot(dir); if (along < 0 || along > bd) continue;
+    if (_v2.addScaledVector(dir, -along).length() < (t.radius || 15) * .9 + along * slack) { bd = along; best = t; } }
+  for (let d = 150; d < bd; d += 150) { _v3.copy(start).addScaledVector(dir, d); if (_v3.y < floorAt(_v3.x, _v3.z)) { return [null, d]; } }
+  return [best, bd];
+}
+function fireRail() {
+  const P = player, sp = ST.sp, start = _v6.copy(P.pos).addScaledVector(P.fwd, 9).addScaledVector(P.up, -1);
+  const [t, d] = rayHit(start, P.fwd, sp.range, .008), end = start.clone().addScaledVector(P.fwd, d);
+  let bm = railBeams.find(x => !x.visible); if (!bm) { bm = makeBeam(new THREE.Color(1.2, 3.5, 7)); railBeams.push(bm); }
+  placeBeam(bm, start, end, 1.1); bm.material.opacity = 1; bm.userData.t = .35;
+  if (t) { damage(t, 320, true, sp.vd); hitSpark(end); explode(end, .45, false); }
+  sfxTone(2600, 160, .4, .2, 'sawtooth'); sfxNoise(.3, 3000, .3, 'highpass'); shake = Math.max(shake, .45); fx.flash = Math.max(fx.flash, .06);
+}
+function updateBeams(dt, inp) {
+  for (const bm of railBeams) if (bm.visible) { bm.userData.t -= dt; bm.material.opacity = Math.max(0, bm.userData.t / .35); bm.scale.x = bm.scale.y = 1.1 * bm.material.opacity + .1; if (bm.userData.t <= 0) bm.visible = false; }
+  const P = player, sp = ST.sp, want = sp.kind === 'laser' && P.wsel === 'sp' && inp && inp.fire && P.alive && !P.frozen && P.sp > 0;
+  if (!laser.mesh) { laser.mesh = makeBeam(new THREE.Color(7, .9, .6)); laser.glow = makeBeam(new THREE.Color(2.5, .25, .2)); }
+  laser.on = !!want;
+  if (!want) { laser.mesh.visible = laser.glow.visible = false; return; }
+  P.sp = Math.max(0, P.sp - dt);
+  const start = _v6.copy(P.pos).addScaledVector(P.fwd, 7).addScaledVector(P.up, -1);
+  const [t, d] = rayHit(start, P.fwd, sp.range, .004), end = start.clone().addScaledVector(P.fwd, d);
+  const flick = .8 + Math.random() * .4; placeBeam(laser.mesh, start, end, .35 * flick); placeBeam(laser.glow, start, end, 1.4 * flick);
+  fire.emit(end.x, end.y, end.z, rand(-20, 20), rand(-20, 20), rand(-20, 20), .2, 3, 7, 1, .6, .4, 1, .2, .1, 1, 1);
+  laser.tick -= dt;
+  if (laser.tick <= 0) { laser.tick = .12; if (t) { damage(t, 160 * .12, false, sp.vd * .12); hitMarkT = .08; } if (SND.ctx && !SND.muted) sfxTone(880, 860, .12, .03, 'sawtooth'); }
 }
 function playerFireMissile() {
   if (player.frozen) return;
@@ -1255,6 +1382,10 @@ function updateMissiles(dt) {
       m.vel.multiplyScalar(1 - .08 * dt); m.vel.y -= 9.8 * dt;
       m.pos.addScaledVector(m.vel, dt);
       m.mesh.position.copy(m.pos);
+      if (m.bomb) { m.mesh.quaternion.setFromUnitVectors(NEG_Z, _v1.copy(m.vel).normalize());
+        let hitT = null; for (const t of aliveTargets()) if (segPointDist(m.prev, m.pos, t.pos) < Math.max(35, (t.radius || 0))) { hitT = t; break; }
+        if (hitT || m.pos.y < floorAt(m.pos.x, m.pos.z) + 1) { bombBlast(m.pos.clone(), m); removeMissile(i); continue; } }
+      if (m.life <= 0) { removeMissile(i); continue; }
       if (m.age >= m.ignite) ignite(m);
       continue;
     }
@@ -1282,7 +1413,7 @@ function updateMissiles(dt) {
     let hit = null;
     if (m.owner === 'player') {
       if (m.target) { if (segPointDist(m.prev, m.pos, m.target.pos) < Math.max(m.target.kind === 'air' ? 20 : 30, (m.target.radius || 0) * .9)) hit = m.target; }
-      else for (const t of enemies) if (t.alive && segPointDist(m.prev, m.pos, t.pos) < 18) { hit = t; break; }
+      else for (const t of aliveTargets()) if (segPointDist(m.prev, m.pos, t.pos) < Math.max(m.rocket ? 22 : 18, (t.radius || 0) * .9)) { hit = t; break; }
       if (!hit && !m.target) for (const g of grounds) if (g.alive && segPointDist(m.prev, m.pos, g.pos) < 28) { hit = g; break; }
     } else if (player.alive && m.target === player && segPointDist(m.prev, m.pos, player.pos) < 17) hit = player;
     else if (m.target && m.target.remote && m.target.alive && segPointDist(m.prev, m.pos, m.target.pos) < 17) {
@@ -1296,6 +1427,10 @@ function updateMissiles(dt) {
     if (m.pos.y < gh + 1) { explode(m.pos, .5, false); if (m.owner === 'player') { for (const g of grounds) if (g.alive && g.pos.distanceTo(m.pos) < 45) { damage(g, 100, true); break; } } removeMissile(i); continue; }
     if (m.life <= 0) { puff(m.pos, 8, 6, .55); if (m.owner === 'player' && m.target) showMsg('MISSED', HUDD); removeMissile(i); continue; }
   }
+}
+function bombBlast(p, m) {
+  explode(p, 2.2); shockwave(p, 160, .7, new THREE.Color(1.8, 1.1, .5));
+  for (const t of aliveTargets()) { const d = t.pos.distanceTo(p); if (d < 140) damage(t, m.dmg * (1 - d / 280), true, m.vdmg); }
 }
 function removeMissile(i) { scene.remove(missiles[i].mesh); missiles.splice(i, 1); }
 const immune = () => mode === 'tutorial' || (opts.beginner && mode === 'mission');
@@ -1316,6 +1451,32 @@ function recoverPlayer(reason) {
   P.speed = Math.max(P.speed, 240); P.hp = P.maxHp; outTimer = 0; shake = .8; post.first = true;
   showMsg('AUTO RECOVERY', AMBER, 2, true);
 }
+function collidables() {
+  const out = []; for (const e of enemies) if (e.alive) out.push(e);
+  if (mode === 'multi') { for (const q of puppets.values()) if (q.alive) out.push(q);
+    if (NET.view && NET.view.ph === 'fight') for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); }
+  return out;
+}
+function checkCollisions() {
+  const P = player; if (!P.alive || P.frozen || state !== 'play') return;
+  for (const t of collidables()) { const r = (t.radius || 15) * (t.boss ? 1 : .75) + 7; if (t.pos.distanceToSquared(P.pos) < r * r) { ramInto(t); return; } }
+}
+const trimHits = () => { if (NET.hits.length > 12) NET.hits.shift(); };
+// local AI: small fry are destroyed outright; bosses only take a chunk (a quarter in RAM ATTACK)
+function ramDamage(t, hard) {
+  if (t.isBoss || t.boss || t.pod) { const core = t.pod ? t.parent : t; core.hp -= core.maxHp * (hard ? .25 : .08); if (core.hp <= 0 && core.alive) destroy(core, true); else showMsg('BOSS DAMAGED', AMBER, 1.5); }
+  else destroy(t, true);
+}
+function ramInto(t) {
+  const P = player, hard = !!P.ram, big = !!(t.isBoss || t.boss || t.pod);
+  explode(P.pos.clone(), hard ? 2.6 : 1.6); shake = 2; fx.flash = Math.max(fx.flash, hard ? .45 : .25);
+  if (t.remote) { NET.hits.push([t.peer, 999, ++NET.hitSeq, 3]); trimHits(); }
+  else if (t.puppet) { const L = roster()[0]; NET.hits.push([L, hard ? 2 : 1, ++NET.hitSeq, 2, t.id]); trimHits(); t.myHitT = performance.now(); }
+  else ramDamage(t, hard);
+  if (hard) { shockwave(P.pos, 260, .8, new THREE.Color(2.4, 1.4, .6)); for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 320) damage(e, 250, true, 60); }
+  showMsg(big ? 'RAMMED' : 'RAM KILL', AMBER, 2.2, true);
+  killPlayer('体当たり', t.remote ? t.peer : null);
+}
 function killPlayer(reason, killer) {
   if (immune()) { recoverPlayer(reason); return; }
   if (mode === 'multi') { netDie(reason, killer); return; }
@@ -1326,7 +1487,12 @@ function killPlayer(reason, killer) {
 function fireBullet() {
   const b = bullets.find(x => x.life <= 0); if (!b) return;
   b.pos.copy(player.pos).addScaledVector(player.fwd, 7).addScaledVector(player.right, .95).addScaledVector(player.up, .35);
-  b.vel.copy(player.fwd).add(_v1.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(.0045)).normalize().multiplyScalar(1050).addScaledVector(player.vel, 1);
+  _v2.copy(player.fwd);
+  if (curTarget && curTarget.kind === 'air' && curTarget.alive) { // gun assist: bend the stream onto the lead point when roughly on target
+    const d = curTarget.pos.distanceTo(b.pos), tof = d / (ST.gunSpd + player.speed * .9);
+    if (d < 1900) { _v3.copy(curTarget.pos).addScaledVector(curTarget.vel, tof).sub(b.pos).divideScalar(Math.max(tof, .01)).sub(player.vel).normalize();
+      if (_v3.angleTo(player.fwd) < .11) _v2.lerp(_v3, .85).normalize(); } }
+  b.vel.copy(_v2).add(_v1.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(.004)).normalize().multiplyScalar(ST.gunSpd).addScaledVector(player.vel, 1);
   b.life = 1.6; b.fake = false; player.gun--;
 }
 function fireFakeBullet(o) {
@@ -1342,9 +1508,9 @@ function updateBullets(dt) {
       b.life -= dt; _v1.copy(b.pos); b.pos.addScaledVector(b.vel, dt);
       let dead = b.life <= 0;
       if (!dead && !b.fake && mode === 'multi') for (const q of puppets.values()) { if (q.alive && segPointDist(_v1, b.pos, q.pos) < Math.max(13, q.radius * .8)) { damage(q, ST.gunDmg, false); hitSpark(b.pos); dead = true; break; } }
-      if (!dead && !b.fake && mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; if (segPointDist(_v1, b.pos, o.pos) < 13) { damage(o, ST.gunDmg, false, ST.gunVd); hitSpark(b.pos); dead = true; break; } }
+      if (!dead && !b.fake && mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; if (segPointDist(_v1, b.pos, o.pos) < 17) { damage(o, ST.gunDmg, false, ST.gunVd); hitSpark(b.pos); dead = true; break; } }
       if (!dead && !b.fake) for (const t of enemies) { if (!t.alive) continue; if (Math.abs(t.pos.x - b.pos.x) > 120 || Math.abs(t.pos.z - b.pos.z) > 120) continue;
-        if (segPointDist(_v1, b.pos, t.pos) < Math.max(13, (t.radius || 0) * .8)) { damage(t, ST.gunDmg, false); hitSpark(b.pos); dead = true; break; } }
+        if (segPointDist(_v1, b.pos, t.pos) < Math.max(17, (t.radius || 0) * .85)) { damage(t, ST.gunDmg, false); hitSpark(b.pos); dead = true; break; } }
       if (!dead && !b.fake) for (const g of grounds) { if (!g.alive) continue; if (Math.abs(g.pos.x - b.pos.x) > 120 || Math.abs(g.pos.z - b.pos.z) > 120) continue;
         if (segPointDist(_v1, b.pos, g.pos) < 22) { damage(g, 5, false); hitSpark(b.pos); dead = true; break; } }
       if (!dead && b.pos.y < floorAt(b.pos.x, b.pos.z)) { const w = b.pos.y < 1 && groundAt(b.pos.x, b.pos.z) < 0; if (Math.random() < .6) smoke.emit(b.pos.x, Math.max(b.pos.y, 0), b.pos.z, 0, w ? 22 : 7, 0, .9, 2, 9, w ? .95 : .55, w ? .97 : .5, w ? 1 : .42, .8, .8, .8, .7, 1); dead = true; }
@@ -1545,7 +1711,7 @@ function updatePlayer(dt) {
   P.velDir.y -= Math.max(0, 110 - P.speed) * .0009 * dt * 60; P.velDir.normalize();
   P.aoa = P.velDir.angleTo(P.fwd);
   const altF = clamp(1 - (P.pos.y - 6500) / 8000, .45, 1);
-  const thrust = (P.throttle < .55 ? P.throttle / .55 * 63 : 63 + (P.throttle - .55) / .45 * 100 * ST.thr) * altF * ST.spd * ST.spd;
+  const thrust = (P.ram ? 1.3 : 1) * (P.throttle < .55 ? P.throttle / .55 * 63 : 63 + (P.throttle - .55) / .45 * 100 * ST.thr) * altF * ST.spd * ST.spd;
   const drag = .00105 * P.speed * P.speed * (inp.brake && !highG ? 2.3 : 1) + P.aoa * P.speed * .25 + Math.abs(P.cp) * P.speed * .012 + (highG && Math.abs(P.cp) > .3 ? 115 : 0);
   P.prevSpeed = P.speed;
   P.speed = clamp(P.speed + (thrust - drag - 9.81 * P.velDir.y * 1.1) * dt, 30, 560);
@@ -1556,6 +1722,11 @@ function updatePlayer(dt) {
     P.g += (gNow - P.g) * (1 - Math.exp(-dt * 8)); P.maxG = Math.max(P.maxG, P.g); }
   const fl = floorAt(P.pos.x, P.pos.z); P.agl = P.pos.y - fl;
   if (P.agl < 2.5) { P.pos.y = fl + 2; killPlayer('墜落'); return inp; }
+  const dry = P.msl <= 0 && P.gun <= 0 && P.sp <= 0;
+  if (dry && !P.ram) { P.ram = true; showMsg('RAM ATTACK', AMBER, 3, true); radio('NIGHTJAR', '弾切れか！？…体当たりで道を開くつもりか。無茶はするなよ！', 4, true); }
+  if (!dry) P.ram = false;
+  checkCollisions();
+  if (!P.alive) return inp;
   P.mesh.position.copy(P.pos); P.mesh.quaternion.copy(P.quat); P.mesh.visible = camView === 0 || lookingAtTarget;
   const flaps = clamp((150 - P.speed) / 70, 0, 1) * .8 + (inp.brake ? .25 : 0);
   animateJet(P.mesh, P.cp, P.cr, P.cy, inp.brake ? 1 : 0, flaps, P.throttle, dt, missionTime);
@@ -1934,7 +2105,7 @@ function drawHUD() {
   const wx = cockpit && mfd ? mfd.rx + mfd.mw - 6 : W - pad, wy = cockpit && mfd ? mfd.my + mfd.mw * .76 : H - pad - (isTouch ? 170 * s + 60 : 0);
   c.textAlign = 'right'; c.textBaseline = 'bottom'; font(15);
   const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN],
-    [(P.wsel === 'sp' ? '▶' : '  ') + ST.sp.n + ' ' + P.sp + (P.spCd > 0 ? ' ·' : ''), P.wsel === 'sp' ? AMBER : HUDD], [(P.wsel === 'msl' ? '▶' : '  ') + `MSL ${P.msl}`, P.msl ? (P.wsel === 'msl' ? HUDC : HUDD) : WARN],
+    [(P.wsel === 'sp' ? '▶' : '  ') + ST.sp.n + ' ' + (ST.sp.kind === 'laser' ? Math.ceil(P.sp) + 's' : P.sp) + (P.spCd > 0 ? ' ·' : ''), P.wsel === 'sp' ? AMBER : HUDD], [(P.wsel === 'msl' ? '▶' : '  ') + `MSL ${P.msl}`, P.msl ? (P.wsel === 'msl' ? HUDC : HUDD) : WARN],
     [(curTarget && curTarget.kind === 'ground' ? 'AGM' : 'AAM') + (opts.lockMode === 'manual' ? ' · LOCK MAN' : ' · LOCK AUTO'), HUDD]];
   lines.forEach(([t, col], i) => { c.fillStyle = col; c.fillText(t, wx, wy - i * 21 * s); });
   // pylon status (4 stations)
@@ -1954,6 +2125,7 @@ function drawHUD() {
   if (P.alive) {
     let wyy = cy + 196 * s;
     if (P.highG) { font(16); c.fillStyle = AMBER; c.fillText('HIGH-G TURN', cx, wyy - 22 * s); }
+    if (P.ram && blink) { font(24); c.fillStyle = AMBER; c.fillText('RAM ATTACK — 敵に突っ込め', cx, cy + 120 * s); }
     if (alertLevel > 0 && (Math.floor(now * (4 + alertLevel * 8)) % 2 === 0 || alertLevel < .2)) { font(26); c.fillStyle = WARN; c.strokeStyle = WARN; const t = 'MISSILE ALERT'; const tw = c.measureText(t).width + 24 * s; c.lineWidth = 2 * s; c.strokeRect(cx - tw / 2, hy + 22 * s, tw, 32 * s); c.fillText(t, cx, hy + 38 * s); c.lineWidth = 1.5 * s; }
     else if (lockWarn) { font(18); c.fillStyle = AMBER; c.fillText('WARNING  ·  LOCKED ON', cx, hy + 38 * s); }
     const vsp = P.vel.y; if (P.agl < 450 && vsp < -20 && P.agl / -vsp < 5 && blink) { font(26); c.fillStyle = WARN; c.fillText('PULL UP', cx, wyy); wyy += 30 * s; }
@@ -2402,22 +2574,25 @@ function netDie(reason, killer) {
   const k = killer && remotes.get(killer); NET.killerName = k ? k.label : '';
   showMsg(reason === '墜落' ? 'CRASHED' : 'SHOT DOWN', WARN, 2.5, true);
 }
-function receiveHit(o, d, ai) {
+function receiveHit(o, d, ai, flag) {
   if (!player.alive || !NET.view || NET.view.ph !== 'fight' || (!ai && isAlly(o))) return;
+  if (flag === 3) { player.hp = 0; explode(player.pos.clone(), 1.6); netDie('体当たり', o.peer); return; }
   player.hp -= clamp(d, 0, 90); shake = Math.max(shake, 1.2); fx.red = 1; showMsg('DAMAGED', WARN, 1.2);
   if (player.hp <= 0) { player.hp = 0; netDie('被撃墜', o.peer); }
 }
 function makeRemote(peer, pr) {
   const col = numv(pr.c) % 4, pc = PBODY[col];
-  const as = Array.isArray(pr.as) ? pr.as : null, pt = as && PARTS.paint[numv(as[1])], fr = as && PARTS.frame[numv(as[0])];
-  const mesh = makeJet(pt ? { body: pt.body, dark: pt.dark, tail: pt.tail } : { body: pc[0], dark: 0x3d4247, tail: pc[1] }); if (fr) mesh.scale.set(fr.sc[0], fr.sc[1], fr.sc[2]); scene.add(mesh);
+  const as = Array.isArray(pr.as) ? pr.as : null, fr = as && PARTS.frame[numv(as[0])], col24 = v => clamp(Math.round(numv(v)), 0, 0xffffff);
+  const look = as && as.length >= 8 ? { shape: fr ? fr.shape : 'std', body: col24(as[2]), dark: col24(as[3]), tail: col24(as[4]), armor: clamp(numv(as[5]), 0, 2),
+    eng: (PARTS.engine[numv(as[6])] || PARTS.engine[0]).id, sp: (PARTS.special[numv(as[7])] || PARTS.special[0]).id } : { body: pc[0], dark: 0x3d4247, tail: pc[1] };
+  const mesh = makeJet(look); if (fr) mesh.scale.set(fr.sc[0], fr.sc[1], fr.sc[2]); scene.add(mesh);
   const o = { kind: 'air', remote: true, peer, label: 'PILOT', color: col, mesh, pos: new V3(), vel: new V3(), dir: new V3(0, 0, -1), quat: new Q4(), netPos: new V3(), netQuat: new Q4(),
     speed: 0, throttle: .5, cp: 0, cr: 0, cy: 0, alive: false, hp: 100, radius: 15, score: 1000, ace: false, kills: 0, deaths: 0, missiles: new Map(), gun: false, gunT: 0, upd: -1, recvAt: 0, trailT: 0, lastDs: undefined, flSeq: undefined, first: true };
   let mx = 0; if (Array.isArray(pr.h)) for (const h of pr.h) if (Array.isArray(h)) mx = Math.max(mx, numv(h[2])); NET.lastHit[peer] = mx;
   return o;
 }
 function removeRemote(o) {
-  scene.remove(o.mesh); for (const rm of o.missiles.values()) scene.remove(rm.mesh); o.missiles.clear();
+  scene.remove(o.mesh); if (o.beam) scene.remove(o.beam); for (const rm of o.missiles.values()) scene.remove(rm.mesh); o.missiles.clear();
   if (curTarget === o) { curTarget = null; lockT = 0; } o.alive = false;
 }
 function applyRemote(o, pr, updatedAt) {
@@ -2429,6 +2604,7 @@ function applyRemote(o, pr, updatedAt) {
     o.recvAt = performance.now();
   }
   o.rdy = pr.rdy === 1; o.out = pr.out === 1; o.mt = sanitizeMt(pr.mt);
+  o.lz = pr.lz === 1;
   o.hp = clamp(numv(pr.hp), 0, 100); o.kills = numv(pr.k); o.deaths = numv(pr.dt); o.gun = pr.g === 1;
   const alive = pr.al === 1;
   if (o.alive && !alive) { explode(o.pos, 1.4); spawnDebris(o.pos, o.vel, 8); o.mesh.visible = false; }
@@ -2443,7 +2619,7 @@ function applyRemote(o, pr, updatedAt) {
   // hits addressed to me
   if (Array.isArray(pr.h)) for (const h of pr.h) { if (!Array.isArray(h)) continue; const s2 = numv(h[2]);
     if (h[0] === NET.me && s2 > (NET.lastHit[o.peer] || 0)) { NET.lastHit[o.peer] = s2;
-      if (typeof h[4] === 'number') applyAIHit(h[4], numv(h[1]), o); else receiveHit(o, numv(h[1]), h[3] === 1); } }
+      if (typeof h[4] === 'number') applyAIHit(h[4], numv(h[1]), o, h[3] === 2); else receiveHit(o, numv(h[1]), h[3] === 1, h[3]); } }
   // leader's co-op enemies and flak
   o.en = Array.isArray(pr.en) ? pr.en.slice(0, 20) : null; o.fk = Array.isArray(pr.fk) ? pr.fk.slice(0, 8) : null;
   // their flares can spoof my missiles
@@ -2470,6 +2646,8 @@ function stepRemote(o, dt) {
   o.trailT -= dt; if (o.trailT <= 0) { o.trailT = .05; _v3.copy(o.pos).addScaledVector(o.dir, -9); smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
     if (o.hp < 60) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 2.5, 3, 16, .2, .2, .2, .45, .45, .45, .65, .5); }
   if (o.gun) { o.gunT -= dt; while (o.gunT <= 0) { fireFakeBullet(o); o.gunT += 1 / 20; } } else o.gunT = 0;
+  if (o.lz) { if (!o.beam) o.beam = makeBeam(new THREE.Color(7, .9, .6)); _v4.copy(o.pos).addScaledVector(o.dir, 7); _v5.copy(_v4).addScaledVector(o.dir, 3000); placeBeam(o.beam, _v4, _v5, .4 + Math.random() * .2); }
+  else if (o.beam) o.beam.visible = false;
   for (const rm of o.missiles.values()) { const a = Math.min(.5, (performance.now() - rm.at) / 1000); _v4.copy(rm.net).addScaledVector(rm.dir, 700 * a);
     _v5.copy(rm.pos); rm.pos.lerp(_v4, 1 - Math.exp(-dt * 12)); rm.mesh.position.copy(rm.pos); rm.mesh.quaternion.setFromUnitVectors(NEG_Z, rm.dir);
     const n = Math.min(6, Math.max(1, Math.ceil(_v5.distanceTo(rm.pos) / 5))); for (let k = 0; k < n; k++) { const f = k / n; smoke.emit(lerp(rm.pos.x, _v5.x, f) - rm.dir.x * 2, lerp(rm.pos.y, _v5.y, f) - rm.dir.y * 2, lerp(rm.pos.z, _v5.z, f) - rm.dir.z * 2, rand(-1, 1), rand(-.5, 1.5), rand(-1, 1), 3, 1.6, 9, .97, .97, .97, .78, .8, .82, .62, .4); } }
@@ -2478,7 +2656,7 @@ function buildPresence() {
   const P = player, r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, r2 = v => Math.round(v * 100) / 100;
   const m = []; for (const ms of missiles) if ((ms.owner === 'player' || NET.mt) && ms.nid && m.length < 16) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target === P ? NET.me : ms.target && ms.target.remote ? ms.target.peer : null]);
   return { v: 1, rm: NET.name, n: NET.callsign, c: NET.color, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
-    s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp / P.maxHp * 100), mh: P.maxHp, as: [LO.frame, LO.paint], al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
+    s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp / P.maxHp * 100), mh: P.maxHp, as: (c => [LO.frame, LO.paint, c.body, c.dark, c.tail, LO.armor, LO.engine, LO.special])(paintColors()), lz: laser.on ? 1 : 0, al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
     g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-12), fl: NET.flare, rdy: NET.rdy, out: NET.out ? 1 : 0, mt: NET.mt, en: NET.mt && NET.mt.mode === 'coop' ? coopEnemyList() : null, fk: NET.mt && NET.mt.mode === 'coop' ? NET.flak : null };
 }
 function netUpdate(dt) {
@@ -2515,17 +2693,28 @@ function renderHangar() {
     const row = document.createElement('div'); row.className = 'seg' + (cat === 'paint' ? ' paint' : '');
     PARTS[cat].forEach((pt, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'segb' + (LO[cat] === i ? ' on' : ''); b.setAttribute('aria-pressed', LO[cat] === i);
-      if (cat === 'paint') { b.title = pt.n; b.setAttribute('aria-label', pt.n); b.style.setProperty('--sw1', '#' + pt.body.toString(16).padStart(6, '0')); b.style.setProperty('--sw2', '#' + pt.tail.toString(16).padStart(6, '0')); }
+      if (cat === 'paint') { b.title = pt.n; b.setAttribute('aria-label', pt.n); b.style.setProperty('--sw1', pt.custom ? LO.custom.body : '#' + pt.body.toString(16).padStart(6, '0')); b.style.setProperty('--sw2', pt.custom ? LO.custom.tail : '#' + pt.tail.toString(16).padStart(6, '0')); if (pt.custom) b.textContent = '✎'; }
       else { b.textContent = pt.n; if (pt.w != null && cat !== 'frame') { const w = document.createElement('small'); w.textContent = pt.w + 'kg'; b.append(w); } }
-      b.addEventListener('click', () => { LO[cat] = i; try { localStorage.setItem('skylance-loadout', JSON.stringify(LO)); } catch (e) {} if (cat === 'frame' || cat === 'paint') rebuildPlayerMesh(); renderHangar(); sfxTone(900, 1100, .05, .04, 'triangle'); });
+      b.addEventListener('click', () => { LO[cat] = i; saveLoadout(); rebuildPlayerMesh(); renderHangar(); sfxTone(900, 1100, .05, .04, 'triangle'); });
       row.append(b);
     });
     sec.append(row);
-    const d = document.createElement('p'); d.className = 'pdesc'; const cur = part(cat); d.textContent = cat === 'paint' ? cur.n : cur.d; sec.append(d);
+    if (cat === 'paint') { // free colour pickers: editing any switches to the CUSTOM scheme
+      const cr = document.createElement('div'); cr.className = 'colors';
+      [['body', '機体'], ['dark', 'アクセント'], ['tail', '尾翼']].forEach(([k, n]) => {
+        const lab = document.createElement('label'), inp = document.createElement('input'); inp.type = 'color'; inp.id = 'col-' + k;
+        const cur = part('paint'); inp.value = cur.custom ? LO.custom[k] : '#' + (cur[k] || 0).toString(16).padStart(6, '0');
+        inp.addEventListener('input', () => { if (!part('paint').custom) { const c = paintColors(); for (const kk of ['body', 'dark', 'tail']) LO.custom[kk] = '#' + c[kk].toString(16).padStart(6, '0'); LO.paint = PARTS.paint.findIndex(x => x.custom); }
+          LO.custom[k] = inp.value; saveLoadout(); rebuildPlayerMesh(); });
+        inp.addEventListener('change', () => renderHangar());
+        lab.append(inp, document.createTextNode(n)); lab.htmlFor = inp.id; cr.append(lab); });
+      sec.append(cr);
+    }
+    const d = document.createElement('p'); d.className = 'pdesc'; const cur = part(cat); d.textContent = cat === 'paint' ? (cur.custom ? 'CUSTOM — 下の3色を自由に選べる' : cur.n + '（下の色を変えるとカスタムになる）') : cur.d; sec.append(d);
     box.append(sec);
   }
   const st = stats(), w = loadWeight(), cap = part('frame').cap, over = w > cap;
-  const bars = [['耐久', st.hp / 1.8], ['旋回', st.turn / 1.2], ['最高速', st.spd / 1.15], ['加速', st.thr * st.spd * st.spd / 1.3], ['積載', w / cap]];
+  const bars = [['耐久', st.hp / 1.8], ['旋回', st.turn / 1.3], ['最高速', st.spd / 1.15], ['加速', st.thr * st.spd * st.spd / 1.3], ['積載', w / cap]];
   const sb = $('#hgStats'); sb.textContent = '';
   for (const [n, v] of bars) { const r = document.createElement('div'); r.className = 'stat' + (n === '積載' && over ? ' over' : '');
     const a = document.createElement('span'); a.textContent = n; const t = document.createElement('i'); const f = document.createElement('b'); f.style.width = Math.round(clamp(v, 0, 1) * 100) + '%'; t.append(f);
@@ -2563,15 +2752,15 @@ function enemyMesh(code) {
   let m;
   switch (code) {
     case 'A': return makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 });
-    case 'I': m = makeJet({ body: 0x8a9098, dark: 0x4a4f55, tail: 0x2f7a3a }); m.scale.set(.86, .9, 1.06); return m;
-    case 'S': m = makeJet({ body: 0x2a2e33, dark: 0x1a1d20, tail: 0x2a2e33 }); m.scale.set(1.08, .82, 1.12); return m;
+    case 'I': m = makeJet({ body: 0x8a9098, dark: 0x4a4f55, tail: 0x2f7a3a, shape: 'delta' }); m.scale.set(.9, .9, 1.04); return m;
+    case 'S': m = makeJet({ body: 0x2a2e33, dark: 0x1a1d20, tail: 0x2a2e33, shape: 'wing' }); return m;
     case 'M': { m = makeJet({ body: 0x6b705f, dark: 0x40443a, tail: 0x5a5f4c }); m.scale.set(2.4, 1.7, 2.1);
       const pm = new THREE.MeshStandardMaterial({ color: 0x3a3e36, metalness: .4, roughness: .6 });
       for (const x of [-3.2, 3.2]) { const g = new THREE.CylinderGeometry(.55, .6, 3.2, 10); g.rotateX(-Math.PI / 2); const p = new THREE.Mesh(g, pm); p.position.set(x, -.5, 1.2); m.add(p); }
       return m; }
     case 'L': { const tail = { JACKAL: 0x3f8f4a, RAVEN: 0x7a3fbf, VANTA: 0xd9b229 }[dfNow().lt] || 0xc23a2a;
-      m = makeJet({ body: 0x23252b, dark: 0x111214, tail }); m.scale.setScalar(1.15); return m; }
-    case 'X': m = makeJet({ body: 0xe8ecf0, dark: 0x8a2a2a, tail: 0xb01818 }); m.scale.setScalar(2.6); return m;
+      m = makeJet({ body: 0x23252b, dark: 0x111214, tail, shape: 'fsw', armor: 1 }); m.scale.setScalar(1.15); return m; }
+    case 'X': m = makeJet({ body: 0xe8ecf0, dark: 0x8a2a2a, tail: 0xb01818, shape: 'fsw', armor: 2, eng: 'turbo', sp: 'eml' }); m.scale.setScalar(2.6); return m;
     case 'B': return makeBossMesh();
     case 'H': return makeHydraMesh();
     case 'E': case 'D': return null;
@@ -2740,8 +2929,10 @@ function coopEnemyList() {
     if (out.length >= 20) break; }
   return out;
 }
-function applyAIHit(nid, d, from) {
-  const e = enemies.find(x => x.nid === nid && x.alive); if (!e || e.shield) return;
+function applyAIHit(nid, d, from, ram) {
+  const e = enemies.find(x => x.nid === nid && x.alive); if (!e) return;
+  if (ram) { ramDamage(e, d >= 2); return; }
+  if (e.shield) return;
   e.hp -= clamp(d, 0, 150); if (e.hp <= 0) destroy(e, true);
 }
 const PUP_CODES = ['F', 'I', 'S', 'M', 'A', 'L', 'X', 'B', 'H', 'E', 'D'];
@@ -2829,7 +3020,7 @@ function update(dt) {
   radioCooldown -= dt;
   const inp = updatePlayer(dt);
   updateTargeting(dt);
-  lastInp = inp;
+  lastInp = inp; updateBeams(dt, inp);
   for (const e of enemies) updateEnemy(e, dt);
   for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].removed) enemies.splice(i, 1);
   for (const g of grounds) updateGround(g, dt);
@@ -2925,6 +3116,7 @@ function resize() {
   resizePost();
 }
 addEventListener('resize', resize);
+addEventListener('pointerup', () => { touch.fire = false; }); addEventListener('pointercancel', () => { touch.fire = false; });
 // keep the waiting room alive while the tab is in the background (rAF stops there)
 setInterval(() => { if (document.hidden && state === 'mlobby') { netUpdate(.25); updateMroomUI(); } }, 250);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
