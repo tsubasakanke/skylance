@@ -125,7 +125,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 #mrList li{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--hud-dim);font:14px var(--mono);min-width:0}
 #mrList li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #mrList .ok{color:var(--hud)}#mrList span:last-child{color:var(--muted);flex:none}
-#mrModeRow{margin-bottom:8px}#mrModeRow .btn.on{background:rgba(141,255,180,.22);border-color:var(--hud);color:var(--hud)}
+#mrModeRow,#mrDiffRow{margin-bottom:8px}#mrModeRow .btn.on,#mrDiffRow .btn.on{background:rgba(141,255,180,.22);border-color:var(--hud);color:var(--hud)}
 </style>
 
 </head>
@@ -240,6 +240,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
     <p class="note" id="mrInfo" role="status"></p>
     <ul id="mrList" aria-label="参加パイロット"></ul>
     <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（2対2）</button><button class="btn ghost sm" data-mode="coop">協力（ボス戦）</button></div>
+    <div class="row" id="mrDiffRow" hidden><button class="btn ghost sm" data-diff="easy">イージー（復活∞）</button><button class="btn ghost sm" data-diff="normal">ノーマル（復活3）</button><button class="btn ghost sm" data-diff="hard">ハード（復活0）</button></div>
     <p class="note" id="mrRule"></p>
     <div class="row"><button class="btn" id="readyBtn">準備OK</button><button class="btn ghost" id="mrLeave">退出</button></div>
   </div>
@@ -991,8 +992,8 @@ function clearMission() {
   popups.length = 0; timers.length = 0;
   smoke.clear(); fire.clear(); msgs.length = 0; radioQ.length = 0; radioCur = null;
 }
-function spawnFighter(x, y, z, ace = false, wave = 1) {
-  const mesh = ace ? makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 }) : makeJet({ body: 0x646a5c, dark: 0x3c4038, tail: 0x8e2a22 });
+function spawnFighter(x, y, z, ace = false, wave = 1, code = null) {
+  const mesh = code ? enemyMesh(code) : ace ? makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 }) : makeJet({ body: 0x646a5c, dark: 0x3c4038, tail: 0x8e2a22 });
   scene.add(mesh);
   const e = { kind: 'air', ace, label: ace ? 'VANTA' : 'FTR', mesh, pos: new V3(x, y, z), vel: new V3(), dir: new V3(rand(-1, 1), 0, rand(-1, 1)).normalize(),
     speed: 240, hp: ace ? 200 : 100, maxHp: ace ? 200 : 100, alive: true, dead: false, deadT: 0, roll: 0, prevRoll: 0, pull: 0, state: 'patrol', stateT: 0, evadeDir: new V3(),
@@ -1043,7 +1044,8 @@ function spawnPhase2() {
   radio('NIGHTJAR', '先頭の機体…黄色い尾翼。敵エース「ヴァンタ」だ。気を抜くな、ケストレル1。', 5);
   radio('VANTA', 'ケストレルとかいうのはお前か。俺の空で好き勝手やってくれたな。', 4.5);
 }
-function aliveTargets() { const out = []; for (const e of enemies) if (e.alive) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') { for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); for (const q of puppets.values()) if (q.alive) out.push(q); } return out; }
+const hidden = t => t.stealth && t.pos.distanceTo(player.pos) > 3000;
+function aliveTargets() { const out = []; for (const e of enemies) if (e.alive && !hidden(e)) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') { for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); for (const q of puppets.values()) if (q.alive && !hidden(q)) out.push(q); } return out; }
 function checkPhase() {
   if (missionResult || mode !== 'mission') return;
   if (phase === 1 && aliveTargets().length === 0) after(1.5, spawnPhase2);
@@ -1137,7 +1139,7 @@ function damage(t, amt, byMissile, vamt) {
 }
 function destroy(t, byPlayer) {
   t.alive = false;
-  explode(t.pos, t.kind === 'air' ? 1.25 : 1.6);
+  explode(t.pos, t.isBoss ? 3 : t.kind === 'air' ? 1.25 : 1.6);
   if (byPlayer || t.kind === 'air') {
     score += t.score; kills++; if (mode === 'multi' && NET.mt && NET.mt.mode === 'coop') NET.mt.sc = (NET.mt.sc || 0) + t.score;
     chain = missionTime - lastKillT < 8 ? chain + 1 : 1; lastKillT = missionTime; if (mode === 'tutorial') tut.kills++;
@@ -1284,10 +1286,10 @@ function updateMissiles(dt) {
       if (!hit && !m.target) for (const g of grounds) if (g.alive && segPointDist(m.prev, m.pos, g.pos) < 28) { hit = g; break; }
     } else if (player.alive && m.target === player && segPointDist(m.prev, m.pos, player.pos) < 17) hit = player;
     else if (m.target && m.target.remote && m.target.alive && segPointDist(m.prev, m.pos, m.target.pos) < 17) {
-      explode(m.pos, .7); NET.hits.push([m.target.peer, 60, ++NET.hitSeq, 1]); if (NET.hits.length > 12) NET.hits.shift(); removeMissile(i); continue; }
+      explode(m.pos, .7); NET.hits.push([m.target.peer, coopMissileDmg(), ++NET.hitSeq, 1]); if (NET.hits.length > 12) NET.hits.shift(); removeMissile(i); continue; }
     const gh = floorAt(m.pos.x, m.pos.z);
     if (hit) {
-      if (hit === player) { explode(m.pos, .7); damagePlayer(mode === 'multi' ? 60 : 34); }
+      if (hit === player) { explode(m.pos, .7); damagePlayer(mode === 'multi' ? coopMissileDmg() : 34); }
       else { explode(m.pos, .6, false); damage(hit, m.dmg || 100, true, m.vdmg); }
       removeMissile(i); continue;
     }
@@ -1385,19 +1387,21 @@ function updateEnemy(e, dt) {
   for (let k = 0; k < 4; k++) if (e.pyl[k] > 0) { e.pyl[k] -= dt; if (e.pyl[k] <= 0) e.mesh.userData.pylons[k].visible = true; }
   let threat = null;
   for (const m of missiles) if (m.owner === 'player' && m.target === e && m.pos.distanceTo(e.pos) < 1400) { threat = m; break; }
-  if (threat && !e.drone) {
+  e.flareCd = (e.flareCd || 0) - dt;
+  if (threat && !e.drone && !e.noEvade) {
+    aiFlares(e, threat);
     if (e.state !== 'evade' || e.stateT <= 0) {
       e.evadeDir.crossVectors(threat.dir, UP).normalize().multiplyScalar(Math.random() < .5 ? -1 : 1).addScaledVector(UP, rand(-.5, .6)).normalize();
       e.state = 'evade'; e.stateT = rand(1.2, 2);
     }
-    desired.copy(e.evadeDir); targetSpeed = 320;
+    desired.copy(e.evadeDir); targetSpeed = 320 * (e.spdMul || 1);
   } else if (!e.drone && T.alive && (dist < 10000 || e.state === 'attack' || e.wave === 2)) {
-    if (e.state === 'extend' && e.stateT > 0) { desired.copy(e.evadeDir); targetSpeed = 310; }
+    if (e.state === 'extend' && e.stateT > 0) { desired.copy(e.evadeDir); targetSpeed = 310 * (e.spdMul || 1); }
     else {
       e.state = 'attack';
       const lead = Math.min(dist / 700, 2.2);
       desired.copy(T.pos).addScaledVector(T.vel, lead).sub(e.pos).normalize();
-      targetSpeed = dist > 3000 ? 300 : 250;
+      targetSpeed = (dist > 3000 ? 300 : 250) * (e.spdMul || 1);
       if (dist < 450) { e.state = 'extend'; e.stateT = rand(3, 5); e.evadeDir.copy(e.dir).addScaledVector(_v3.set(rand(-1, 1), rand(0, .4), rand(-1, 1)), .8).normalize(); }
     }
   } else {
@@ -1411,7 +1415,7 @@ function updateEnemy(e, dt) {
   if (e.pos.y > 7000) desired.y -= .6;
   if (Math.hypot(e.pos.x, e.pos.z) > 17000) desired.addScaledVector(_v3.set(-e.pos.x, 0, -e.pos.z).normalize(), 1.5);
   desired.normalize(); desired.y = clamp(desired.y, -.65, .75); desired.normalize();
-  const turnRate = (e.ace ? 1.3 : .82) * (threat ? 1.35 : 1);
+  const turnRate = (e.turnRate || (e.ace ? 1.3 : .82)) * (threat && !e.noEvade ? 1.35 : 1);
   const ang = e.dir.angleTo(desired);
   _v3.crossVectors(e.dir, desired); const crossY = _v3.y;
   if (ang > 1e-4 && _v3.lengthSq() > 1e-10) { _v3.normalize(); e.dir.applyAxisAngle(_v3, Math.min(ang, turnRate * dt)); }
@@ -1428,19 +1432,23 @@ function updateEnemy(e, dt) {
   e.mesh.position.copy(e.pos);
   // surfaces follow what the AI is doing: pull = turning hard, roll rate = aileron
   const rollRate = (e.roll - e.prevRoll) / Math.max(dt, 1e-3);
-  if (e.mesh.position.distanceToSquared(camera.position) < 2500 * 2500)
+  if (e.mesh.userData.ail && e.mesh.position.distanceToSquared(camera.position) < 2500 * 2500)
     animateJet(e.mesh, clamp(ang * 2.5, 0, 1), clamp(-rollRate * .8, -1, 1), 0, 0, 0, e.throttle, dt, missionTime + e.phase);
   e.trailT -= dt;
-  if (e.trailT <= 0) { e.trailT = .05; _v3.copy(e.pos).addScaledVector(e.dir, -9);
-    smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
+  if (e.trailT <= 0) { e.trailT = .05; _v3.copy(e.pos).addScaledVector(e.dir, -9 * (e.code === 'X' ? 2.6 : e.code === 'M' ? 2.1 : 1));
+    if (!e.stealth) smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
     if (e.hp < e.maxHp * .6) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 2.5, 3, 16, .2, .2, .2, .45, .45, .45, .65, .5); }
   if (!e.drone && T.alive && dist < 4000 && dist > 450 && e.dir.dot(toP) > .9 && e.missileCd <= 0 && enemyMissileCount() < (mode === 'multi' ? 2 + aiTargets().length : phase === 2 ? 3 : 2)) {
     const k = e.pyl.findIndex(v => v <= 0);
     if (k >= 0) {
       _v4.set(0, 1, 0).applyQuaternion(e.mesh.quaternion);
-      launchMissile(e.mesh.userData.pylons[k], e.pos, e.dir, e.speed, T, 'enemy', _v4, k >= 2 ? .3 : .06, e.vel, k >= 2 ? 9 : 0);
-      e.pyl[k] = 14;
-      e.missileCd = e.ace ? rand(3.5, 5.5) : rand(8, 13);
+      for (let n = 0; n < (e.salvo || 1); n++) {
+        const kk = n === 0 ? k : e.pyl.findIndex(v => v <= 0);
+        if (kk >= 0) { launchMissile(e.mesh.userData.pylons[kk], e.pos, e.dir, e.speed, T, 'enemy', _v4, kk >= 2 ? .3 : .06, e.vel, kk >= 2 ? 9 : 0); e.pyl[kk] = 14; }
+        else { _v5.set(rand(-6, 6), -3, 0).applyQuaternion(e.mesh.quaternion).add(e.pos); const mm = launchMissile(null, _v5, e.dir, e.speed, T, 'enemy', _v4, .2 + n * .08, e.vel, 8); mm.turn = 1.7; }
+      }
+      const cr = e.cdRange || (e.ace ? [3.5, 5.5] : [8, 13]);
+      e.missileCd = rand(cr[0], cr[1]) * (mode === 'multi' ? dfNow().cd : 1);
       if (T === player && radioCooldown <= 0 && Math.random() < .6) { radio('NIGHTJAR', pick(['ミサイル接近！回避しろ！', 'ケストレル1、ミサイルだ！ブレイク！', 'ロックされているぞ！']), 2.8, true); radioCooldown = 5; }
     }
   }
@@ -1655,11 +1663,11 @@ function drawRadar(c, x0, y0, rr, s, blink) {
   // north marker and AO boundary
   c.strokeStyle = 'rgba(255,90,71,.5)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(-P.pos.x * k, -P.pos.z * k, 17500 * k, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
   for (const g of grounds) { const x = (g.pos.x - P.pos.x) * k, y = (g.pos.z - P.pos.z) * k; c.fillStyle = !g.alive ? 'rgba(141,255,180,.25)' : g === curTarget && blink ? '#fff' : WARN; c.fillRect(x - 3 * s, y - 3 * s, 6 * s, 6 * s); }
-  for (const e of enemies) { if (!e.alive) continue; let x = (e.pos.x - P.pos.x) * k, y = (e.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
+  for (const e of enemies) { if (!e.alive || hidden(e)) continue; let x = (e.pos.x - P.pos.x) * k, y = (e.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
     c.fillStyle = e === curTarget && blink ? '#fff' : e.ace ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(e.dir.x, -e.dir.z)); c.beginPath(); c.moveTo(0, -6 * s); c.lineTo(4 * s, 4 * s); c.lineTo(-4 * s, 4 * s); c.closePath(); c.fill(); c.restore(); }
   for (const m of missiles) { const x = (m.pos.x - P.pos.x) * k, y = (m.pos.z - P.pos.z) * k; c.fillStyle = m.owner === 'enemy' ? (blink ? WARN : '#fff') : HUDC; c.fillRect(x - 1.5, y - 1.5, 3, 3); }
-  for (const q of puppets.values()) { if (!q.alive) continue; let x = (q.pos.x - P.pos.x) * k, y = (q.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
-    const z = q.code === 'B' ? 2 : q.code === 'E' ? .6 : 1; c.fillStyle = q === curTarget && blink ? '#fff' : q.ace || q.code === 'B' ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(q.dir.x, -q.dir.z)); c.beginPath(); c.moveTo(0, -6 * s * z); c.lineTo(4 * s * z, 4 * s * z); c.lineTo(-4 * s * z, 4 * s * z); c.closePath(); c.fill(); c.restore(); }
+  for (const q of puppets.values()) { if (!q.alive || hidden(q)) continue; let x = (q.pos.x - P.pos.x) * k, y = (q.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
+    const z = q.isBoss ? 2 : q.code === 'E' || q.code === 'D' ? .6 : q.code === 'M' ? 1.5 : 1; c.fillStyle = q === curTarget && blink ? '#fff' : q.ace || q.isBoss ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(q.dir.x, -q.dir.z)); c.beginPath(); c.moveTo(0, -6 * s * z); c.lineTo(4 * s * z, 4 * s * z); c.lineTo(-4 * s * z, 4 * s * z); c.closePath(); c.fill(); c.restore(); }
   if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; let x = (o.pos.x - P.pos.x) * k, y = (o.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
     c.fillStyle = o === curTarget && blink ? '#fff' : PCOL[o.color % 4]; c.save(); c.translate(x, y); c.rotate(Math.atan2(o.dir.x, -o.dir.z)); c.beginPath(); c.moveTo(0, -7 * s); c.lineTo(5 * s, 5 * s); c.lineTo(-5 * s, 5 * s); c.closePath(); c.fill(); c.restore();
     for (const rm of o.missiles.values()) { const mx = (rm.pos.x - P.pos.x) * k, my = (rm.pos.z - P.pos.z) * k; c.fillStyle = rm.tgt === NET.me ? (blink ? WARN : '#fff') : PCOL[o.color % 4]; c.fillRect(mx - 2, my - 2, 4, 4); } }
@@ -2292,7 +2300,7 @@ function sanitizeMt(m) {
   const tm = m.tm && typeof m.tm === 'object' ? Object.fromEntries(Object.entries(m.tm).slice(0, 6).map(([k, v]) => [str(k), v === 1 ? 1 : 0])) : null;
   const w = m.w && typeof m.w === 'object' ? Object.fromEntries(Object.entries(m.w).slice(0, 8).map(([k, v]) => [str(k), clamp(numv(v), 0, 9)])) : {};
   return { s: numv(m.s), ph: m.ph, r: clamp(numv(m.r), 0, 9), rl: clamp(numv(m.rl), -5, 900), pl, tm, w, mode: m.mode === 'team' ? 'team' : m.mode === 'coop' ? 'coop' : 'ffa', win: str(m.win), mid: str(m.mid),
-    wave: clamp(numv(m.wave), 0, 9), sc: clamp(numv(m.sc), 0, 1e7), res: m.res === 'win' ? 'win' : m.res === 'lose' ? 'lose' : '' };
+    wave: clamp(numv(m.wave), 0, 9), sc: clamp(numv(m.sc), 0, 1e7), res: m.res === 'win' ? 'win' : m.res === 'lose' ? 'lose' : '', df: ['easy', 'normal', 'hard'].includes(m.df) ? m.df : 'normal' };
 }
 function setupRound(mt, present) {
   mt.pl = present.slice(0, 4);
@@ -2303,7 +2311,7 @@ function leaderStep(dt) {
   const aliveOf = id => id === NET.me ? player.alive : !!(remotes.get(id) && remotes.get(id).alive);
   const readyOf = id => id === NET.me ? NET.rdy === 1 : !!(remotes.get(id) && remotes.get(id).rdy);
   const go = (ph, rl) => { mt.ph = ph; mt.rl = rl; mt.s++; };
-  if (mt.ph === 'wait') { mt.mode = NET.mode; if (present.length >= (mt.mode === 'coop' ? 1 : 2) && present.every(readyOf)) { mt.r = 1; mt.w = {}; mt.win = ''; mt.wave = 0; mt.sc = 0; mt.res = ''; mt.mid = Math.random().toString(36).slice(2, 8); setupRound(mt, present); go('count', 4); } return; }
+  if (mt.ph === 'wait') { mt.mode = NET.mode; if (present.length >= (mt.mode === 'coop' ? 1 : 2) && present.every(readyOf)) { mt.r = 1; mt.w = {}; mt.win = ''; mt.wave = 0; mt.sc = 0; mt.res = ''; mt.df = NET.diff; mt.mid = Math.random().toString(36).slice(2, 8); setupRound(mt, present); go('count', 4); } return; }
   if (mt.mode === 'coop') { coopLeaderStep(mt, dt, go); return; }
   if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) go('fight', 240); }
   else if (mt.ph === 'fight') {
@@ -2331,7 +2339,7 @@ function onPhase(mt) {
     $('#mroom').hidden = true; $('#touch').hidden = !isTouch; if (state === 'mlobby') { state = 'play'; setGuide(opts.guide); }
     if (inPl && NET.spawnKey !== key) { NET.spawnKey = key; spawnForRound(mt); }
     else if (!inPl && NET.spawnKey !== key) { NET.spawnKey = key; player.alive = false; player.mesh.visible = false; showMsg('SPECTATING', HUDD, 2); }
-    if (mt.ph === 'count' && mt.mode === 'coop') { NET.seenWave = 0; showMsg('CO-OP MISSION', HUDC, 3, true); radio('NIGHTJAR', '協力作戦開始。全4ウェーブ、途中で大型目標が出現する。互いに援護しろ。', 4.5, true); }
+    if (mt.ph === 'count' && mt.mode === 'coop') { NET.seenWave = 0; NET.lives = (DIFF[mt.df] || DIFF.normal).lives; NET.out = false; showMsg('CO-OP MISSION', HUDC, 3, true); radio('NIGHTJAR', '協力作戦開始。全4ウェーブ、途中で大型目標が出現する。互いに援護しろ。', 4.5, true); }
     else if (mt.ph === 'count') { showMsg(`ROUND ${mt.r}`, HUDC, 3, true); if (mt.r === 1) radio('NIGHTJAR', mt.mode === 'team' ? 'チーム戦開始。味方と連携して敵チームを全滅させろ。' : 'バトルロイヤル開始。最後まで飛んでいた者が勝者だ。', 4, true); }
     else { player.frozen = false; showMsg('FIGHT!', AMBER, 1.6, true); sfxTone(440, 880, .4, .2, 'sawtooth'); }
     return;
@@ -2358,7 +2366,7 @@ function matchTick(dt) {
   if (mt.s !== NET.mtSeen) { NET.mtSeen = mt.s; NET.curPh = mt.ph; onPhase(mt); }
   if (mt.mode === 'coop') {
     if (mt.ph === 'fight' && mt.wave !== NET.seenWave) { NET.seenWave = mt.wave; onWave(mt.wave); }
-    if (mt.ph === 'fight' && !player.alive && mt.pl.includes(NET.me)) { NET.respawnT -= dt; if (NET.respawnT <= 0) { respawnPlayer(); showMsg('BACK IN ACTION', HUDC, 1.5); } }
+    if (mt.ph === 'fight' && !player.alive && !NET.out && mt.pl.includes(NET.me)) { NET.respawnT -= dt; if (NET.respawnT <= 0) { respawnPlayer(); showMsg('BACK IN ACTION', HUDC, 1.5); } }
     if (amL && mt.ph === 'fight' && puppets.size && !enemies.some(e => e.alive)) adoptPuppets();
     if (mt.ph === 'wait' || mt.ph === 'count') { if (amL) clearCoopEnemies(); if (puppets.size) clearPuppets(); }
   }
@@ -2380,7 +2388,9 @@ function updateMroomUI(force) {
   }
   const m = amL ? NET.mode : (mt ? mt.mode : 'ffa');
   document.querySelectorAll('#mrModeRow [data-mode]').forEach(btn => { btn.classList.toggle('on', btn.dataset.mode === m); btn.disabled = !amL; });
-  $('#mrRule').textContent = (m === 'coop' ? '協力：全員で4ウェーブの敵編隊に挑む。3ウェーブ目に超大型爆撃機「LEVIATHAN」が出現。撃墜されても8秒で復帰。制限時間10分。1人でも遊べる。'
+  const df = amL ? NET.diff : (mt && mt.df) || 'normal'; $('#mrDiffRow').hidden = m !== 'coop';
+  document.querySelectorAll('#mrDiffRow [data-diff]').forEach(btn => { btn.classList.toggle('on', btn.dataset.diff === df); btn.disabled = !amL; });
+  $('#mrRule').textContent = (m === 'coop' ? `協力（${DIFF[df].jp}）：全5ウェーブ。1〜3波はランダム編成、4波目にボスの右腕「${DIFF[df].lt}」、最後にボス「${DIFF[df].boss === 'X' ? 'SERAPH' : FORT[DIFF[df].boss].name}」。復活 ${DIFF[df].lives < 0 ? '無制限' : DIFF[df].lives + '回'}。全員の残機が尽きるか13分経つと失敗。1人でも遊べる。`
     : (m === 'team' ? 'チーム戦：青チームと赤チームに分かれて戦う（味方は撃てない）。' : '個人戦：全員が敵のバトルロイヤル。') + '3ラウンド制で先に2ラウンド取ったら勝ち。撃墜されたらそのラウンドは観戦。') + (amL ? '' : '　ルール選択は★の人ができる。');
   $('#readyBtn').textContent = NET.rdy ? '準備OK を取り消す' : '準備OK';
   $('#readyBtn').classList.toggle('ghost', !!NET.rdy);
@@ -2388,6 +2398,7 @@ function updateMroomUI(force) {
 function netDie(reason, killer) {
   const P = player; P.alive = false; P.mesh.visible = false; explode(P.pos, 1.8); spawnDebris(P.pos, P.vel, 10); gunFiring = false; post.first = true;
   NET.deaths++; NET.deathSeq++; NET.killedBy = killer || null; NET.respawnT = 8;
+  if (NET.view && NET.view.mode === 'coop') { if (NET.lives === 0) NET.out = true; else if (NET.lives > 0) NET.lives--; }
   const k = killer && remotes.get(killer); NET.killerName = k ? k.label : '';
   showMsg(reason === '墜落' ? 'CRASHED' : 'SHOT DOWN', WARN, 2.5, true);
 }
@@ -2417,7 +2428,7 @@ function applyRemote(o, pr, updatedAt) {
     o.speed = clamp(numv(pr.s), 0, 700); o.throttle = clamp(numv(pr.th), 0, 1); o.cp = clamp(numv(pr.cp), -1, 1); o.cr = clamp(numv(pr.cr), -1, 1); o.cy = clamp(numv(pr.cy), -1, 1);
     o.recvAt = performance.now();
   }
-  o.rdy = pr.rdy === 1; o.mt = sanitizeMt(pr.mt);
+  o.rdy = pr.rdy === 1; o.out = pr.out === 1; o.mt = sanitizeMt(pr.mt);
   o.hp = clamp(numv(pr.hp), 0, 100); o.kills = numv(pr.k); o.deaths = numv(pr.dt); o.gun = pr.g === 1;
   const alive = pr.al === 1;
   if (o.alive && !alive) { explode(o.pos, 1.4); spawnDebris(o.pos, o.vel, 8); o.mesh.visible = false; }
@@ -2468,7 +2479,7 @@ function buildPresence() {
   const m = []; for (const ms of missiles) if ((ms.owner === 'player' || NET.mt) && ms.nid && m.length < 16) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target === P ? NET.me : ms.target && ms.target.remote ? ms.target.peer : null]);
   return { v: 1, rm: NET.name, n: NET.callsign, c: NET.color, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
     s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp / P.maxHp * 100), mh: P.maxHp, as: [LO.frame, LO.paint], al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
-    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-12), fl: NET.flare, rdy: NET.rdy, mt: NET.mt, en: NET.mt && NET.mt.mode === 'coop' ? coopEnemyList() : null, fk: NET.mt && NET.mt.mode === 'coop' ? NET.flak : null };
+    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-12), fl: NET.flare, rdy: NET.rdy, out: NET.out ? 1 : 0, mt: NET.mt, en: NET.mt && NET.mt.mode === 'coop' ? coopEnemyList() : null, fk: NET.mt && NET.mt.mode === 'coop' ? NET.flak : null };
 }
 function netUpdate(dt) {
   const r = NET.room; if (!r) return;
@@ -2524,15 +2535,59 @@ function renderHangar() {
 }
 function updateLoadoutSummary() { const el = $('#loSummary'); if (el) el.textContent = `${part('frame').n} / ${part('engine').n} / ${part('special').n} / ${part('gun').n} / ${part('paint').n}`; }
 
-/* ================= co-op: waves, boss, leader-simulated enemies ================= */
+/* ================= co-op: waves, difficulty, bosses, leader-simulated enemies ================= */
 const puppets = new Map();
-NET.flak = []; NET.flakSeq = 0; NET.seenFlak = 0; NET.seenWave = 0;
-function coopScale() { const mt = NET.mt || NET.view; return 1 + .35 * Math.max(0, ((mt && mt.pl.length) || 1) - 1); }
+NET.flak = []; NET.flakSeq = 0; NET.seenFlak = 0; NET.seenWave = 0; NET.diff = 'normal'; NET.lives = 3; NET.out = false;
+const WAVES = 5;
+// difficulty: lives (-1 = unlimited), enemy toughness, missile cadence and damage, boss and lieutenant
+const DIFF = {
+  easy: { n: 'EASY', jp: 'イージー', lives: -1, hp: .75, cd: 1.4, dmg: 40, boss: 'B', lt: 'JACKAL' },
+  normal: { n: 'NORMAL', jp: 'ノーマル', lives: 3, hp: 1, cd: 1, dmg: 60, boss: 'H', lt: 'RAVEN' },
+  hard: { n: 'HARD', jp: 'ハード', lives: 0, hp: 1.35, cd: .7, dmg: 80, boss: 'X', lt: 'VANTA' }
+};
+const dfNow = () => DIFF[(NET.mt || NET.view || {}).df] || DIFF.normal;
+const coopMissileDmg = () => dfNow().dmg;
+function coopScale() { const mt = NET.mt || NET.view; return (1 + .35 * Math.max(0, ((mt && mt.pl.length) || 1) - 1)) * dfNow().hp; }
 function coopSpawnPoint() { const a = rand(0, Math.PI * 2), r = rand(9000, 11500); return [Math.sin(a) * r, rand(2400, 3800), Math.cos(a) * r]; }
-function coopFighter(ace) {
-  const [x, y, z] = coopSpawnPoint(); const e = spawnFighter(x, y, z, ace, 2);
-  e.nid = ++NET.mid; e.hp = e.maxHp = Math.round(e.maxHp * coopScale()); e.dir.set(-x, 0, -z).normalize(); return e;
+// enemy catalogue: code → look and behaviour
+const ETYPE = {
+  F: { label: 'FTR', hp: 100, turn: .82, spd: 1, cd: [8, 13], score: 1000 },
+  I: { label: 'INT', hp: 70, turn: 1.02, spd: 1.25, cd: [6, 10], score: 900 },
+  S: { label: 'STL', hp: 110, turn: .9, spd: 1.05, cd: [8, 12], score: 1400, stealth: true },
+  M: { label: 'BMB', hp: 260, turn: .32, spd: .7, cd: [9, 14], score: 1600, radius: 30, noEvade: true },
+  A: { label: 'ACE', hp: 200, turn: 1.3, spd: 1.08, cd: [3.5, 5.5], score: 3000, ace: true },
+  L: { label: 'LT', hp: 520, turn: 1.45, spd: 1.15, cd: [3, 4.5], score: 5000, ace: true, salvo: 2, flares: true, lt: true, radius: 18 },
+  X: { label: 'SERAPH', hp: 2600, turn: 1.3, spd: 1.12, cd: [5, 6.5], score: 15000, ace: true, salvo: 4, flares: true, isBoss: true, radius: 34 }
+};
+function enemyMesh(code) {
+  let m;
+  switch (code) {
+    case 'A': return makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 });
+    case 'I': m = makeJet({ body: 0x8a9098, dark: 0x4a4f55, tail: 0x2f7a3a }); m.scale.set(.86, .9, 1.06); return m;
+    case 'S': m = makeJet({ body: 0x2a2e33, dark: 0x1a1d20, tail: 0x2a2e33 }); m.scale.set(1.08, .82, 1.12); return m;
+    case 'M': { m = makeJet({ body: 0x6b705f, dark: 0x40443a, tail: 0x5a5f4c }); m.scale.set(2.4, 1.7, 2.1);
+      const pm = new THREE.MeshStandardMaterial({ color: 0x3a3e36, metalness: .4, roughness: .6 });
+      for (const x of [-3.2, 3.2]) { const g = new THREE.CylinderGeometry(.55, .6, 3.2, 10); g.rotateX(-Math.PI / 2); const p = new THREE.Mesh(g, pm); p.position.set(x, -.5, 1.2); m.add(p); }
+      return m; }
+    case 'L': { const tail = { JACKAL: 0x3f8f4a, RAVEN: 0x7a3fbf, VANTA: 0xd9b229 }[dfNow().lt] || 0xc23a2a;
+      m = makeJet({ body: 0x23252b, dark: 0x111214, tail }); m.scale.setScalar(1.15); return m; }
+    case 'X': m = makeJet({ body: 0xe8ecf0, dark: 0x8a2a2a, tail: 0xb01818 }); m.scale.setScalar(2.6); return m;
+    case 'B': return makeBossMesh();
+    case 'H': return makeHydraMesh();
+    case 'E': case 'D': return null;
+    default: return makeJet({ body: 0x646a5c, dark: 0x3c4038, tail: 0x8e2a22 });
+  }
 }
+function spawnTyped(code, x, y, z) {
+  const T = ETYPE[code] || ETYPE.F, e = spawnFighter(x, y, z, !!T.ace, 2, code);
+  const sc = coopScale();
+  Object.assign(e, { code, label: T.lt ? dfNow().lt : T.label, turnRate: T.turn, spdMul: T.spd, cdRange: T.cd, salvo: T.salvo || 1, flares: !!T.flares, flareCd: 0,
+    stealth: !!T.stealth, noEvade: !!T.noEvade, isBoss: !!T.isBoss, lt: !!T.lt, radius: T.radius || 15, score: T.score });
+  e.hp = e.maxHp = Math.round(T.hp * sc); e.nid = ++NET.mid; e.dir.set(-x, 0, -z).normalize();
+  return e;
+}
+function coopEnemy(code) { const [x, y, z] = coopSpawnPoint(); return spawnTyped(code, x, y, z); }
+// ---- fortress bosses (LEVIATHAN / HYDRA): weak points generate a shield over the core
 function makeBossMesh() {
   const g = new THREE.Group();
   const hull = new THREE.MeshStandardMaterial({ color: 0x3b4048, metalness: .55, roughness: .42 }), dark = new THREE.MeshStandardMaterial({ color: 0x1f2328, metalness: .5, roughness: .5 });
@@ -2544,24 +2599,48 @@ function makeBossMesh() {
     const tip = new THREE.Mesh(new THREE.SphereGeometry(1.4, 6, 4), red); tip.position.set(sx * 88, 2, 24); g.add(tip); }
   for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), dark); t.position.set((i - 1) * 16, 7, -10 + i * 6); g.add(t); }
   const pods = [];
-  for (const x of [-56, -30, 30, 56]) { const pg = new THREE.Group(); pg.position.set(x, -6, 8);
+  for (const o of FORT.B.pods) { const pg = new THREE.Group(); pg.position.set(o[0], o[1], o[2]);
     geo = new THREE.CylinderGeometry(5, 5.5, 24, 14); geo.rotateX(-Math.PI / 2); pg.add(new THREE.Mesh(geo, dark));
     const d = new THREE.Mesh(new THREE.CircleGeometry(4.2, 14), glow); d.position.z = 12.1; pg.add(d);
     const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(4, 2, .9), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); fl.position.z = 16; fl.scale.setScalar(16); pg.add(fl);
     g.add(pg); pods.push(pg); }
   g.userData.pods = pods; return g;
 }
-const POD_OFF = [[-56, -6, 8], [-30, -6, 8], [30, -6, 8], [56, -6, 8]];
-function spawnBoss() {
-  const sc = coopScale(), mesh = makeBossMesh(); scene.add(mesh);
-  const b = { kind: 'air', boss: true, label: 'LEVIATHAN', mesh, pos: new V3(0, 2600, -9000), vel: new V3(), dir: new V3(1, 0, 0), speed: 150, roll: 0, ang: Math.PI, t: 0,
-    hp: Math.round(1600 * sc), maxHp: Math.round(1600 * sc), alive: true, shield: true, radius: 46, score: 8000, nid: ++NET.mid, missileCd: 3, flakCd: 1, pods: [], ace: false, spin: .25, deadT: 0, phase: 0 };
-  POD_OFF.forEach((o, i) => { const q = { kind: 'air', pod: true, parent: b, label: 'ENGINE', part: mesh.userData.pods[i], off: new V3(o[0], o[1], o[2]), pos: new V3(), vel: new V3(), dir: new V3(),
-    hp: Math.round(320 * sc), maxHp: Math.round(320 * sc), alive: true, radius: 16, score: 1200, nid: ++NET.mid, ace: false }; b.pods.push(q); enemies.push(q); });
+function makeHydraMesh() {
+  const g = new THREE.Group();
+  const hull = new THREE.MeshStandardMaterial({ color: 0x4a4f57, metalness: .5, roughness: .45 }), deck = new THREE.MeshStandardMaterial({ color: 0x2b2f35, metalness: .3, roughness: .7 });
+  const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 2.6, 4) }), red = new THREE.MeshBasicMaterial({ color: new THREE.Color(7, .5, .3) });
+  let geo = new THREE.CylinderGeometry(15, 18, 170, 20); geo.rotateX(-Math.PI / 2); const body = new THREE.Mesh(geo, hull); body.scale.set(1.25, .7, 1); g.add(body);
+  geo = new THREE.ConeGeometry(15, 34, 20); geo.rotateX(-Math.PI / 2); const bow = new THREE.Mesh(geo, hull); bow.scale.set(1.25, .7, 1); bow.position.z = -102; g.add(bow);
+  const fd = new THREE.Mesh(new THREE.BoxGeometry(46, 3, 150), deck); fd.position.set(0, 12, 4); g.add(fd);
+  const isl = new THREE.Mesh(new THREE.BoxGeometry(8, 16, 26), hull); isl.position.set(18, 21, 10); g.add(isl);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(.6, .6, 14, 6), hull); ant.position.set(18, 36, 8); g.add(ant);
+  for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(new THREE.BoxGeometry(1.2, .4, 6), glow); l.position.set(0, 13.8, -60 + i * 22); g.add(l); }
+  const wing = flatPart([[0, -20], [70, 30], [70, 40], [0, 34], [-70, 40], [-70, 30]], 4, hull); wing.position.y = -4; g.add(wing);
+  for (const sx of [-1, 1]) { const tip = new THREE.Mesh(new THREE.SphereGeometry(1.6, 6, 4), red); tip.position.set(sx * 70, -2, 36); g.add(tip); }
+  for (const x of [-12, 12]) { const d = new THREE.Mesh(new THREE.CircleGeometry(7, 16), glow); d.position.set(x, 0, 86); g.add(d);
+    const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(1.5, 2.6, 5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); fl.position.set(x, 0, 92); fl.scale.setScalar(26); g.add(fl); }
+  const pods = [];
+  for (const o of FORT.H.pods) { const pg = new THREE.Group(); pg.position.set(o[0], o[1], o[2]);
+    pg.add(new THREE.Mesh(new THREE.BoxGeometry(12, 10, 26), deck));
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), glow); door.position.set(o[0] < 0 ? -6.1 : 6.1, 0, 0); door.rotation.y = o[0] < 0 ? -Math.PI / 2 : Math.PI / 2; pg.add(door);
+    g.add(pg); pods.push(pg); }
+  g.userData.pods = pods; return g;
+}
+const FORT = {
+  B: { name: 'LEVIATHAN', pods: [[-56, -6, 8], [-30, -6, 8], [30, -6, 8], [56, -6, 8]], podCode: 'E', podName: 'ENGINE', core: 1600, pod: 320, speed: 150, R: 6500, radius: 46, score: 8000 },
+  H: { name: 'HYDRA', pods: [[-25, 2, -40], [25, 2, -40], [-25, 2, 30]], podCode: 'D', podName: 'HANGAR', core: 2200, pod: 420, speed: 120, R: 5500, radius: 52, score: 11000 }
+};
+function spawnBoss(code = 'B') {
+  const F = FORT[code], sc = coopScale(), mesh = code === 'H' ? makeHydraMesh() : makeBossMesh(); scene.add(mesh);
+  const b = { kind: 'air', boss: true, isBoss: true, code, label: F.name, mesh, pos: new V3(0, 2600, -9000), vel: new V3(), dir: new V3(1, 0, 0), speed: F.speed, R: F.R, roll: 0, ang: Math.PI, t: 0,
+    hp: Math.round(F.core * sc), maxHp: Math.round(F.core * sc), alive: true, shield: true, radius: F.radius, score: F.score, nid: ++NET.mid, missileCd: 3, flakCd: 1, droneCd: 8, pods: [], ace: false, spin: .25, deadT: 0, phase: 0 };
+  F.pods.forEach((o, i) => { const q = { kind: 'air', pod: true, code: F.podCode, parent: b, label: F.podName, part: mesh.userData.pods[i], off: new V3(o[0], o[1], o[2]), pos: new V3(), vel: new V3(), dir: new V3(),
+    hp: Math.round(F.pod * sc), maxHp: Math.round(F.pod * sc), alive: true, radius: 16, score: 1200, nid: ++NET.mid, ace: false }; b.pods.push(q); enemies.push(q); });
   enemies.push(b); updateBoss(b, 0); return b;
 }
 function updateBoss(b, dt) {
-  b.t += dt; const R = 6500; b.ang += b.speed / R * dt;
+  b.t += dt; const R = b.R; b.ang += b.speed / R * dt;
   _v1.set(Math.sin(b.ang) * R, 2600 + Math.sin(b.t * .25) * 180, Math.cos(b.ang) * R);
   if (dt > 0) b.dir.subVectors(_v1, b.pos).normalize(); b.vel.copy(b.dir).multiplyScalar(b.speed); b.pos.copy(_v1);
   _v2.copy(b.pos).add(b.dir); _m1.lookAt(b.pos, _v2, UP); b.mesh.quaternion.setFromRotationMatrix(_m1).multiply(_q1.setFromAxisAngle(AX_Z, .12)); b.mesh.position.copy(b.pos);
@@ -2570,15 +2649,20 @@ function updateBoss(b, dt) {
   if (!b.shield && Math.random() < .5) { _v3.set(rand(-20, 20), 4, rand(0, 20)).applyQuaternion(b.mesh.quaternion).add(b.pos); smoke.emit(_v3.x, _v3.y, _v3.z, rand(-3, 3), rand(2, 6), rand(-3, 3), 4, 10, 40, .15, .15, .15, .45, .45, .45, .75, .3); }
   for (const q of b.pods) if (!q.alive) { _v3.copy(q.off).applyQuaternion(b.mesh.quaternion).add(b.pos); if (Math.random() < .6) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 3, 5, 22, .12, .12, .12, .4, .4, .4, .7, .4); }
   if (dt <= 0) return;
-  const tg = aiTargets().filter(t => t.pos.distanceTo(b.pos) < 7500);
+  const D = dfNow(), tg = aiTargets().filter(t => t.pos.distanceTo(b.pos) < 7500);
   b.missileCd -= dt;
   if (b.missileCd <= 0 && tg.length && enemyMissileCount() < 3 + tg.length) {
-    b.missileCd = b.shield ? 3 : 1.7; const T = pick(tg);
+    b.missileCd = (b.shield ? 3 : 1.7) * D.cd; const T = pick(tg);
     _v3.set(rand(-18, 18), 9, rand(-10, 10)).applyQuaternion(b.mesh.quaternion).add(b.pos); _v4.subVectors(T.pos, _v3).normalize(); _v4.y += .4; _v4.normalize();
     const m = launchMissile(null, _v3, _v4, 160, T, 'enemy', UP, 0, null, 0); m.turn = 1.4;
   }
+  // HYDRA launches interceptor drones from every working hangar
+  if (b.code === 'H') { b.droneCd -= dt;
+    if (b.droneCd <= 0) { b.droneCd = 15 * D.cd; const bays = b.pods.filter(q => q.alive), escorts = enemies.filter(e => e.alive && e.code === 'I').length;
+      for (const q of bays) if (escorts + bays.indexOf(q) < 6) { const e = spawnTyped('I', q.pos.x, q.pos.y - 10, q.pos.z); e.dir.copy(b.dir); e.speed = 260; e.hp = e.maxHp = Math.round(e.maxHp * .6); e.score = 400; e.label = 'DRONE'; }
+      if (bays.length) radio('NIGHTJAR', 'HYDRAが艦載機を発進させた！格納庫を潰せ！', 3, true); } }
   b.flakCd -= dt;
-  if (b.flakCd <= 0) { b.flakCd = b.shield ? .5 : .3; const near = tg.filter(t => t.pos.distanceTo(b.pos) < 3200);
+  if (b.flakCd <= 0) { b.flakCd = (b.shield ? .5 : .3) * D.cd; const near = tg.filter(t => t.pos.distanceTo(b.pos) < 3200);
     if (near.length) { const T = pick(near); _v3.copy(T.pos).addScaledVector(T.vel, rand(.1, .5)).add(_v4.set(rand(-70, 70), rand(-50, 50), rand(-70, 70)));
       flakBurst(_v3); NET.flak.push([++NET.flakSeq, Math.round(_v3.x), Math.round(_v3.y), Math.round(_v3.z)]); if (NET.flak.length > 8) NET.flak.shift();
       for (const t of near) if (t.pos.distanceTo(_v3) < 45) { if (t === player) damagePlayer(mode === 'multi' ? 10 : 6); else if (t.remote) { NET.hits.push([t.peer, 10, ++NET.hitSeq, 1]); if (NET.hits.length > 12) NET.hits.shift(); } } } }
@@ -2589,59 +2673,95 @@ function flakBurst(p) {
   const d = p.distanceTo(camera.position); if (d < 1500) { shake = Math.max(shake, (1 - d / 1500) * .5); sfxNoise(.4, 700, (1 - d / 1500) * .3, 'lowpass', 120); }
 }
 function syncFlak(list) { for (const f of list) { if (!Array.isArray(f)) continue; const sq = numv(f[0]); if (sq > NET.seenFlak) { NET.seenFlak = sq; flakBurst(_v6.set(numv(f[1]), numv(f[2]), numv(f[3]))); } } }
+// AI aces and bosses throw flares at incoming missiles
+function aiFlares(e, threat) {
+  if (!e.flares || e.flareCd > 0 || !threat) return;
+  e.flareCd = 5; const now = [];
+  for (let i = 0; i < 5; i++) { const d = { pos: e.pos.clone().addScaledVector(e.dir, -10), vel: e.vel.clone().multiplyScalar(.5).add(_v3.set(rand(-1, 1), rand(-.6, .3), rand(-1, 1)).multiplyScalar(40)), life: 3, alive: true }; decoys.push(d); now.push(d); }
+  for (const m of missiles) if (m.target === e && m.pos.distanceTo(e.pos) < 1800 && Math.random() < .55) m.target = pick(now);
+}
+function livesLeftAll() {
+  const mt = NET.mt; if (!mt) return true;
+  return mt.pl.some(id => id === NET.me ? (player.alive || !NET.out) : (remotes.get(id) && (remotes.get(id).alive || !remotes.get(id).out)));
+}
 function coopLeaderStep(mt, dt, go) {
-  if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) { go('fight', 600); NET.waveGap = 2; } return; }
+  if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) { go('fight', 780); NET.waveGap = 2; } return; }
   if (mt.ph === 'fight') {
     mt.rl -= dt;
     if (!enemies.some(e => e.alive)) { NET.waveGap = (NET.waveGap == null ? 3 : NET.waveGap) - dt;
-      if (NET.waveGap <= 0) { NET.waveGap = 4; if (mt.wave >= 4) { mt.res = 'win'; go('end', 10); } else coopNextWave(mt); } }
-    if (mt.rl <= 0 && mt.ph === 'fight') { mt.res = 'lose'; go('end', 10); }
+      if (NET.waveGap <= 0) { NET.waveGap = 4; if (mt.wave >= WAVES) { mt.res = 'win'; go('end', 10); } else coopNextWave(mt); } }
+    if (mt.ph === 'fight' && (mt.rl <= 0 || !livesLeftAll())) { mt.res = 'lose'; go('end', 10); }
     return;
   }
   if (mt.ph === 'end') { mt.rl -= dt; if (mt.rl <= 0) { clearCoopEnemies(); mt.pl = []; go('wait', 0); } }
 }
+// waves 1–3: random mix from a growing pool; wave 4: the boss's right hand; wave 5: the boss
 function coopNextWave(mt) {
   mt.wave++;
-  if (mt.wave === 1) for (let i = 0; i < 4; i++) coopFighter(false);
-  else if (mt.wave === 2) { for (let i = 0; i < 5; i++) coopFighter(false); coopFighter(true); }
-  else if (mt.wave === 3) { spawnBoss(); coopFighter(false); coopFighter(false); }
-  else { for (let i = 0; i < 6; i++) coopFighter(false); coopFighter(true); }
+  const n = Math.max(1, mt.pl.length), extra = Math.round((n - 1) * .8);
+  if (mt.wave <= 3) {
+    const pool = [[], [['F', 1, 4], ['I', 1, 3]], [['F', 1, 3], ['I', 1, 3], ['S', 1.5, 2], ['M', 2, 2]], [['F', 1, 2], ['I', 1, 3], ['S', 1.5, 3], ['M', 2, 2], ['A', 2.5, 2]]][mt.wave];
+    let budget = [0, 4, 5.5, 7.5][mt.wave] + extra * 1.5, count = 0;
+    while ((budget > .9 || count < 3) && count < 10) {
+      const tot = pool.reduce((a, p) => a + p[2], 0); let r = Math.random() * tot, c = pool[0];
+      for (const p of pool) { r -= p[2]; if (r <= 0) { c = p; break; } }
+      const code = c[0] === 'M' && enemies.filter(e => e.alive && e.code === 'M').length >= 2 ? 'F' : c[0];
+      coopEnemy(code); budget -= code === 'F' ? 1 : c[1]; count++;
+    }
+  } else if (mt.wave === 4) {
+    coopEnemy('L'); for (let i = 0; i < 2 + extra; i++) coopEnemy(pick(['F', 'I', 'S']));
+  } else {
+    const D = DIFF[mt.df] || DIFF.normal;
+    if (D.boss === 'X') { const e = coopEnemy('X'); e.pos.set(0, 3000, -10000); e.dir.set(0, 0, 1); } else spawnBoss(D.boss);
+    for (let i = 0; i < (mt.df === 'easy' ? 0 : mt.df === 'hard' ? 3 : 2) + extra; i++) coopEnemy(pick(['F', 'I', 'S']));
+  }
 }
 function onWave(w) {
   if (!w) return;
-  if (w === 3) { showMsg('WARNING', WARN, 3, true); after(1.2, () => showMsg('LEVIATHAN APPROACHING', AMBER, 3, true)); sfxTone(300, 200, 1.2, .2, 'sawtooth');
-    radio('NIGHTJAR', '超大型爆撃機「LEVIATHAN」接近！エンジン4基がシールドを張っている。まずエンジンを潰せ！', 5.5, true); }
-  else { showMsg(`WAVE ${w}`, HUDC, 2.5, true); radio('NIGHTJAR', ['', '第1波、敵戦闘機4機。各機、交戦開始。', '第2波接近、エース機を含む。気をつけろ。', '', '最終波だ！全機、残りの力を出し切れ！'][w], 4, true); }
+  const D = dfNow();
+  if (w === WAVES) {
+    const name = D.boss === 'X' ? 'SERAPH' : FORT[D.boss].name;
+    showMsg('WARNING', WARN, 3, true); after(1.2, () => showMsg(name + ' APPROACHING', AMBER, 3, true)); sfxTone(300, 200, 1.2, .2, 'sawtooth');
+    radio('NIGHTJAR', { B: '超大型爆撃機「LEVIATHAN」接近！エンジン4基がシールドを張っている。まずエンジンを潰せ！', H: '空中空母「HYDRA」出現！格納庫3つがシールドを張り、艦載機を吐き出してくる。格納庫から叩け！',
+      X: '…なんだあの機体は。超大型戦闘機「SERAPH」、異常な機動だ。フレアも使う、ミサイルは引きつけて撃て！' }[D.boss], 6, true);
+  } else if (w === WAVES - 1) {
+    showMsg('WARNING', WARN, 2.5, true); after(1, () => showMsg(D.lt + ' ENGAGED', AMBER, 3, true));
+    radio('NIGHTJAR', `敵ボスの右腕、エース「${D.lt}」が出てきた！フレアを使うぞ、正面から撃つな。`, 5, true);
+    radio(D.lt, pick(['ここから先へは行かせない。', '我が主の空を汚す者め。', 'ほう、ここまで来たか。']), 3.5);
+  } else { showMsg(`WAVE ${w}`, HUDC, 2.5, true); radio('NIGHTJAR', ['', '第1波接近。各機、交戦開始。', '第2波、ステルス機と爆撃機を含む。レーダーに頼りすぎるな。', '第3波、エース機を確認。気を引き締めろ。'][w], 4, true); }
 }
 function clearCoopEnemies() { for (const e of enemies) if (e.mesh) scene.remove(e.mesh); enemies.length = 0; for (const m of [...missiles]) if (m.owner === 'enemy') { scene.remove(m.mesh); missiles.splice(missiles.indexOf(m), 1); } }
-const TYPE_CODE = e => e.boss ? 'B' : e.pod ? 'E' : e.ace ? 'A' : 'F';
+const TYPE_CODE = e => e.code || (e.boss ? 'B' : e.pod ? 'E' : e.ace ? 'A' : 'F');
 function coopEnemyList() {
   const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, out = [];
   for (const e of enemies) { if (!e.alive || !e.nid) continue;
     const mask = e.boss ? e.pods.reduce((m, q, i) => m | (q.alive ? 1 << i : 0), 0) : 0;
     out.push([e.nid, TYPE_CODE(e), r1(e.pos.x), r1(e.pos.y), r1(e.pos.z), r3(e.dir.x), r3(e.dir.y), r3(e.dir.z), Math.round((e.roll || 0) * 100) / 100, Math.round(e.hp / e.maxHp * 100), mask]);
-    if (out.length >= 18) break; }
+    if (out.length >= 20) break; }
   return out;
 }
 function applyAIHit(nid, d, from) {
   const e = enemies.find(x => x.nid === nid && x.alive); if (!e || e.shield) return;
   e.hp -= clamp(d, 0, 150); if (e.hp <= 0) destroy(e, true);
 }
+const PUP_CODES = ['F', 'I', 'S', 'M', 'A', 'L', 'X', 'B', 'H', 'E', 'D'];
 function makePuppet(id, code) {
-  const q = { kind: 'air', puppet: true, id, code, label: code === 'B' ? 'LEVIATHAN' : code === 'E' ? 'ENGINE' : code === 'A' ? 'ACE' : 'FTR', ace: code === 'A', boss: false,
+  const T = ETYPE[code], fort = FORT[code];
+  const label = fort ? fort.name : code === 'E' ? 'ENGINE' : code === 'D' ? 'HANGAR' : code === 'L' ? dfNow().lt : T ? T.label : 'FTR';
+  const q = { kind: 'air', puppet: true, id, code, label, ace: !!(T && T.ace), isBoss: !!fort || code === 'X', lt: code === 'L', stealth: !!(T && T.stealth),
     pos: new V3(), net: new V3(), dir: new V3(0, 0, -1), ndir: new V3(0, 0, -1), vel: new V3(), roll: 0, hpPct: 100, mask: 15, alive: true, at: 0, upd: -1,
-    radius: code === 'B' ? 46 : code === 'E' ? 16 : 15, speed: code === 'B' ? 150 : code === 'E' ? 150 : 260, mesh: null, trailT: 0, myHitT: 0, shield: false };
-  if (code === 'B') q.mesh = makeBossMesh(); else if (code !== 'E') q.mesh = code === 'A' ? makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 }) : makeJet({ body: 0x646a5c, dark: 0x3c4038, tail: 0x8e2a22 });
+    radius: fort ? fort.radius : code === 'E' || code === 'D' ? 16 : (T && T.radius) || 15, speed: fort ? fort.speed : code === 'E' || code === 'D' ? 140 : 260 * ((T && T.spd) || 1),
+    mesh: enemyMesh(code), trailT: 0, myHitT: 0, shield: false };
   if (q.mesh) scene.add(q.mesh); return q;
 }
 function syncPuppets(list, upd) {
   const seen = new Set();
-  for (const e of list) { if (!Array.isArray(e) || e.length < 11) continue; const id = numv(e[0]), code = ['F', 'A', 'B', 'E'].includes(e[1]) ? e[1] : 'F'; seen.add(id);
+  for (const e of list) { if (!Array.isArray(e) || e.length < 11) continue; const id = numv(e[0]), code = PUP_CODES.includes(e[1]) ? e[1] : 'F'; seen.add(id);
     let q = puppets.get(id); if (!q) { q = makePuppet(id, code); puppets.set(id, q); q.pos.set(numv(e[2]), numv(e[3]), numv(e[4])); }
     if (q.upd !== upd) { q.upd = upd; q.at = performance.now(); }
     q.net.set(numv(e[2]), numv(e[3]), numv(e[4])); q.ndir.set(numv(e[5]), numv(e[6]), numv(e[7])); if (q.ndir.lengthSq() < .01) q.ndir.set(0, 0, -1); q.ndir.normalize();
     q.roll = clamp(numv(e[8]), -2, 2); q.hpPct = clamp(numv(e[9]), 0, 100); q.mask = numv(e[10]);
-    if (code === 'B') { q.shield = (q.mask & 15) !== 0; q.mesh.userData.pods.forEach((pg, i) => { pg.visible = !!(q.mask & (1 << i)); }); } }
+    if (FORT[code] && q.mesh) { q.shield = (q.mask & 15) !== 0; q.mesh.userData.pods.forEach((pg, i) => { pg.visible = !!(q.mask & (1 << i)); }); } }
   for (const [id, q] of puppets) if (!seen.has(id)) { removePuppet(q, true); puppets.delete(id); }
 }
 function stepPuppet(q, dt) {
@@ -2649,50 +2769,53 @@ function stepPuppet(q, dt) {
   if (q.pos.distanceTo(_v1) > 500) q.pos.copy(_v1); else q.pos.lerp(_v1, 1 - Math.exp(-dt * 8));
   q.dir.lerp(q.ndir, 1 - Math.exp(-dt * 8)).normalize(); q.vel.copy(q.dir).multiplyScalar(q.speed);
   if (!q.mesh) return;
-  _v2.copy(q.pos).add(q.dir); _m1.lookAt(q.pos, _v2, UP); q.mesh.quaternion.setFromRotationMatrix(_m1).multiply(_q1.setFromAxisAngle(AX_Z, q.code === 'B' ? .12 : q.roll)); q.mesh.position.copy(q.pos);
-  if (q.code !== 'B') { animateJet(q.mesh, .3, 0, 0, 0, 0, .7, dt, missionTime + q.id);
-    q.trailT -= dt; if (q.trailT <= 0) { q.trailT = .05; _v3.copy(q.pos).addScaledVector(q.dir, -9); smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
+  const fort = !!FORT[q.code];
+  _v2.copy(q.pos).add(q.dir); _m1.lookAt(q.pos, _v2, UP); q.mesh.quaternion.setFromRotationMatrix(_m1).multiply(_q1.setFromAxisAngle(AX_Z, fort ? .12 : q.roll)); q.mesh.position.copy(q.pos);
+  if (!fort) { if (q.mesh.userData.ail) animateJet(q.mesh, .3, 0, 0, 0, 0, .7, dt, missionTime + q.id);
+    q.trailT -= dt; if (q.trailT <= 0) { q.trailT = .05; _v3.copy(q.pos).addScaledVector(q.dir, -9 * (q.code === 'X' ? 2.6 : 1)); if (!q.stealth) smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
       if (q.hpPct < 60) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 2.5, 3, 16, .2, .2, .2, .45, .45, .45, .65, .5); } }
 }
 function removePuppet(q, boom) {
-  if (boom && NET.view && NET.view.ph === 'fight') { explode(q.pos, q.code === 'B' ? 3 : 1.2); spawnDebris(q.pos, q.vel, q.code === 'B' ? 24 : 8);
+  if (boom && NET.view && NET.view.ph === 'fight') { const big = q.isBoss ? 3 : q.code === 'M' ? 1.8 : 1.2; explode(q.pos, big); spawnDebris(q.pos, q.vel, q.isBoss ? 24 : 8);
     if (performance.now() - q.myHitT < 2500) { showMsg('DESTROYED', HUDC, 1.9, true); popups.push({ pos: q.pos.clone(), text: 'KILL', sub: q.label, t: 1.8 }); kills++; } }
   if (q.mesh) scene.remove(q.mesh); q.alive = false; if (curTarget === q) { curTarget = null; lockT = 0; }
 }
 function clearPuppets() { for (const q of puppets.values()) removePuppet(q, false); puppets.clear(); }
 // the old leader left mid-fight: take over its enemies so the mission continues
 function adoptPuppets() {
-  let boss = null; const pods = [];
   for (const q of puppets.values()) {
-    if (q.code === 'F' || q.code === 'A') { const e = spawnFighter(q.pos.x, q.pos.y, q.pos.z, q.code === 'A', 2); e.nid = ++NET.mid; e.dir.copy(q.dir); e.maxHp = Math.round(e.maxHp * coopScale()); e.hp = Math.max(1, e.maxHp * q.hpPct / 100); }
-    else if (q.code === 'B') boss = q; else pods.push(q);
+    if (FORT[q.code]) { const b = spawnBoss(q.code); b.pos.copy(q.pos); b.ang = Math.atan2(q.pos.x, q.pos.z); b.hp = Math.max(1, b.maxHp * q.hpPct / 100);
+      b.pods.forEach((p, i) => { if (!(q.mask & (1 << i))) { p.alive = false; p.removed = true; p.part.visible = false; } }); }
+    else if (ETYPE[q.code]) { const e = spawnTyped(q.code, q.pos.x, q.pos.y, q.pos.z); e.dir.copy(q.dir); e.hp = Math.max(1, e.maxHp * q.hpPct / 100); }
   }
-  if (boss) { const b = spawnBoss(); b.pos.copy(boss.pos); b.ang = Math.atan2(boss.pos.x, boss.pos.z); b.hp = Math.max(1, b.maxHp * boss.hpPct / 100);
-    b.pods.forEach((q, i) => { if (!(boss.mask & (1 << i))) { q.alive = false; q.removed = true; q.part.visible = false; } }); }
   clearPuppets();
 }
 function drawCoopHud(c, s, mt, pad, blink, font, cx, cy, P) {
-  c.fillText(`CO-OP · WAVE ${mt.wave || 0}/4 · ROOM ` + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP);
-  c.fillText(mt.wave === 3 ? '巨大爆撃機 LEVIATHAN を撃墜せよ' : '敵編隊を全機撃墜せよ（全4ウェーブ）', pad, pad + 18 * s);
+  const D = DIFF[mt.df] || DIFF.normal;
+  c.fillText(`CO-OP · ${D.n} · WAVE ${mt.wave || 0}/${WAVES} · ROOM ` + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP);
+  c.fillText(mt.wave === WAVES ? 'ボスを撃墜せよ' : mt.wave === WAVES - 1 ? `エース「${D.lt}」を撃墜せよ` : '敵編隊を全機撃墜せよ', pad, pad + 18 * s);
   if (mt.ph === 'fight') { font(22); c.fillStyle = mt.rl < 60 && blink ? WARN : HUDC; c.fillText(fmtTime(Math.max(0, mt.rl)), pad, pad + 38 * s); c.fillStyle = HUDC; }
-  font(13); c.fillText('TEAM SCORE ' + String(mt.sc || 0).padStart(6, '0'), pad, pad + 64 * s);
-  // team list (top-right)
+  font(13); c.fillText('TEAM SCORE ' + String(mt.sc || 0).padStart(6, '0') + '   LIVES ' + (D.lives < 0 ? '∞' : NET.lives), pad, pad + 64 * s);
+  // wingmen (top-right)
   const ids = mt.pl.length ? mt.pl : roster(), sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('WINGMEN', sx0, sy0);
-  ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return; const alive = me ? P.alive : o.alive, hp = me ? P.hp / P.maxHp * 100 : o.hp;
+  ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return; const alive = me ? P.alive : o.alive, out = me ? NET.out : o.out, hp = me ? P.hp / P.maxHp * 100 : o.hp;
     c.fillStyle = PCOL[(me ? NET.color : o.color) % 4]; c.globalAlpha = alive ? 1 : .45;
-    c.fillText((me ? '▶ ' : '') + (me ? NET.callsign : o.label).padEnd(13, ' ') + (alive ? String(Math.round(hp)).padStart(4, ' ') + '%' : '  ---'), sx0, sy0 + (i + 1) * 17 * s); });
+    c.fillText((me ? '▶ ' : '') + (me ? NET.callsign : o.label).padEnd(13, ' ') + (alive ? String(Math.round(hp)).padStart(4, ' ') + '%' : out ? '  OUT' : '  ---'), sx0, sy0 + (i + 1) * 17 * s); });
   c.globalAlpha = 1; c.fillStyle = HUDC; c.textAlign = 'left';
-  // boss bar
-  let boss = enemies.find(e => e.boss && e.alive), pct = 0, shield = false, podsAlive = 0;
-  if (boss) { pct = boss.hp / boss.maxHp * 100; shield = boss.shield; podsAlive = boss.pods.filter(q => q.alive).length; }
-  else { const q = [...puppets.values()].find(x => x.code === 'B' && x.alive); if (q) { boss = q; pct = q.hpPct; shield = q.shield; podsAlive = [0, 1, 2, 3].filter(i => q.mask & (1 << i)).length; } }
-  if (boss) { const bw = Math.min(420 * s, W - 2 * pad), bx = cx - bw / 2, by = 46 * s + 8 + 78 * s;
-    font(12); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillStyle = AMBER; c.fillText('LEVIATHAN' + (shield ? `  ·  SHIELD (ENGINE ×${podsAlive})` : '  ·  SHIELD DOWN'), cx, by - 3);
+  // boss / lieutenant bar
+  let boss = enemies.find(e => e.alive && (e.isBoss || e.lt)) || [...puppets.values()].find(q => q.alive && (q.isBoss || q.lt));
+  if (boss) {
+    const pct = boss.puppet ? boss.hpPct : boss.hp / boss.maxHp * 100, shield = !!boss.shield;
+    const podsAlive = boss.puppet ? [0, 1, 2, 3].filter(i => boss.mask & (1 << i)).length : boss.pods ? boss.pods.filter(q => q.alive).length : 0;
+    const podName = boss.code === 'H' ? 'HANGAR' : 'ENGINE';
+    const bw = Math.min((boss.lt ? 300 : 420) * s, W - 2 * pad), bx = cx - bw / 2, by = 46 * s + 8 + 78 * s;
+    font(12); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillStyle = AMBER;
+    c.fillText(boss.label + (FORT[boss.code] ? (shield ? `  ·  SHIELD (${podName} ×${podsAlive})` : '  ·  SHIELD DOWN') : boss.lt ? '  ·  ACE' : ''), cx, by - 3);
     c.strokeStyle = AMBER; c.strokeRect(bx, by, bw, 8 * s); c.fillStyle = shield ? 'rgba(127,214,255,.85)' : AMBER; c.fillRect(bx + 2, by + 2, (bw - 4) * clamp(pct / 100, 0, 1), 8 * s - 4);
     c.textAlign = 'left'; c.textBaseline = 'top'; c.fillStyle = HUDC; c.strokeStyle = HUDC; }
   if (mt.ph === 'count') { font(72); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = AMBER; c.fillText(String(Math.max(1, Math.ceil(mt.rl))), cx, cy - 60 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
-  if (!P.alive && mt.ph === 'fight') { font(22); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = WARN; c.fillText('SHOT DOWN', cx, 140 * s);
-    font(14, JP); c.fillStyle = '#eaf3ee'; c.fillText('復帰まで ' + Math.max(0, Math.ceil(NET.respawnT)) + ' 秒', cx, 166 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
+  if (!P.alive && mt.ph === 'fight') { font(22); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = WARN; c.fillText(NET.out ? 'NO LIVES LEFT' : 'SHOT DOWN', cx, 140 * s);
+    font(14, JP); c.fillStyle = '#eaf3ee'; c.fillText(NET.out ? '残機なし — 味方を観戦中（R で切替）' : '復帰まで ' + Math.max(0, Math.ceil(NET.respawnT)) + ' 秒' + (D.lives < 0 ? '' : `（残り ${NET.lives}）`), cx, 166 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
 }
 
 /* ================= main loop ================= */
@@ -2784,6 +2907,7 @@ $('#tutSortie').addEventListener('click', () => { if (sortieOk()) startMission()
 $('#guideBtn').addEventListener('click', () => setGuide(!opts.guide));
 $('#readyBtn').addEventListener('click', () => { NET.rdy = NET.rdy ? 0 : 1; updateMroomUI(true); sfxTone(700, 1050, .1, .06, 'triangle'); });
 document.querySelectorAll('#mrModeRow [data-mode]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.mode = b.dataset.mode; updateMroomUI(true); }));
+document.querySelectorAll('#mrDiffRow [data-diff]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.diff = b.dataset.diff; updateMroomUI(true); }));
 $('#mrLeave').addEventListener('click', toTitle);
 $('#resumeBtn').addEventListener('click', resumeGame);
 $('#quitBtn').addEventListener('click', () => { if (SND.ctx) SND.ctx.resume(); toTitle(); });
@@ -2813,7 +2937,7 @@ player.pos.set(0, 3000, 14500);
 resize();
 updateLoadoutSummary();
 // test hook, local dev server only
-if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { NET, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: () => spawnBoss(), damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { NET, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: c => spawnBoss(c), damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
 requestAnimationFrame(frame);
 })();
 </script>
