@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。機体アセンブル・最大4人の対戦／協力プレイ対応。">
+<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。機体アセンブル・最大8人の対戦／協力プレイ対応。">
 <title>SKYLANCE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -183,7 +183,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
         <button class="btn" id="startBtn">出撃 — Sortie</button>
         <button class="btn ghost sm" id="hangarBtn">ハンガー（機体アセンブル）</button>
         <p id="loSummary"></p>
-        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">対戦・協力（最大4人）</button></div>
+        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">対戦・協力（最大8人）</button></div>
       </div>
     </div>
   </div>
@@ -216,9 +216,9 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 
 <section id="lobby" class="screen" hidden>
   <div class="panel result">
-    <h2><span>Multiplayer</span><span>Free for all · max 4</span></h2>
+    <h2><span>Multiplayer</span><span>Up to 8 pilots</span></h2>
     <p class="verdict">マルチプレイ</p>
-    <p>最大4人でリアルタイム対戦。待機室で全員が「準備OK」を押すとラウンド開始。個人戦（バトルロイヤル）とチーム戦（2対2）、どちらも2ラウンド先取で勝ち。友達と遊ぶなら同じルームコードを入れよう。</p>
+    <p>最大8人でリアルタイム対戦・協力。待機室で全員が「準備OK」を押すとラウンド開始。個人戦（バトルロイヤル）・チーム戦（最大4対4）・協力（ボス戦）から選べる。友達と遊ぶなら同じルームコードを入れよう。</p>
     <label class="field" for="callsign">コールサイン（英数字12文字まで）<input id="callsign" maxlength="12" autocomplete="off" spellcheck="false"></label>
     <button class="btn" id="quickBtn">クイックマッチ</button>
     <div class="inline"><input id="roomCode" maxlength="10" placeholder="ルームコード（例: nhs2）" autocomplete="off" aria-label="ルームコード"><button class="btn ghost sm" id="codeBtn">コードで参加</button></div>
@@ -243,7 +243,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
     <p class="verdict">対戦待機中</p>
     <p class="note" id="mrInfo" role="status"></p>
     <ul id="mrList" aria-label="参加パイロット"></ul>
-    <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（2対2）</button><button class="btn ghost sm" data-mode="coop">協力（ボス戦）</button></div>
+    <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（最大4対4）</button><button class="btn ghost sm" data-mode="coop">協力（ボス戦）</button></div>
     <div class="row" id="mrDiffRow" hidden><button class="btn ghost sm" data-diff="easy">イージー（復活∞）</button><button class="btn ghost sm" data-diff="normal">ノーマル（復活3）</button><button class="btn ghost sm" data-diff="hard">ハード（復活0）</button></div>
     <p class="note" id="mrRule"></p>
     <div class="row"><button class="btn" id="readyBtn">準備OK</button><button class="btn ghost" id="mrLeave">退出</button></div>
@@ -2026,8 +2026,8 @@ function drawRadar(c, x0, y0, rr, s, blink) {
   for (const q of puppets.values()) { if (!q.alive || hidden(q)) continue; let x = (q.pos.x - P.pos.x) * k, y = (q.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
     const z = q.isBoss ? 2 : q.code === 'E' || q.code === 'D' ? .6 : q.code === 'M' ? 1.5 : 1; c.fillStyle = q === curTarget && blink ? '#fff' : q.ace || q.isBoss ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(q.dir.x, -q.dir.z)); c.beginPath(); c.moveTo(0, -6 * s * z); c.lineTo(4 * s * z, 4 * s * z); c.lineTo(-4 * s * z, 4 * s * z); c.closePath(); c.fill(); c.restore(); }
   if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; let x = (o.pos.x - P.pos.x) * k, y = (o.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
-    c.fillStyle = o === curTarget && blink ? '#fff' : PCOL[o.color % 4]; c.save(); c.translate(x, y); c.rotate(Math.atan2(o.dir.x, -o.dir.z)); c.beginPath(); c.moveTo(0, -7 * s); c.lineTo(5 * s, 5 * s); c.lineTo(-5 * s, 5 * s); c.closePath(); c.fill(); c.restore();
-    for (const rm of o.missiles.values()) { const mx = (rm.pos.x - P.pos.x) * k, my = (rm.pos.z - P.pos.z) * k; c.fillStyle = rm.tgt === NET.me ? (blink ? WARN : '#fff') : PCOL[o.color % 4]; c.fillRect(mx - 2, my - 2, 4, 4); } }
+    c.fillStyle = o === curTarget && blink ? '#fff' : PCOL[o.color % MAXP]; c.save(); c.translate(x, y); c.rotate(Math.atan2(o.dir.x, -o.dir.z)); c.beginPath(); c.moveTo(0, -7 * s); c.lineTo(5 * s, 5 * s); c.lineTo(-5 * s, 5 * s); c.closePath(); c.fill(); c.restore();
+    for (const rm of o.missiles.values()) { const mx = (rm.pos.x - P.pos.x) * k, my = (rm.pos.z - P.pos.z) * k; c.fillStyle = rm.tgt === NET.me ? (blink ? WARN : '#fff') : PCOL[o.color % MAXP]; c.fillRect(mx - 2, my - 2, 4, 4); } }
   for (const m of incomingThreats()) { const x = (m.pos.x - P.pos.x) * k, y = (m.pos.z - P.pos.z) * k; c.strokeStyle = WARN; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, y); c.lineTo(x + m.dir.x * 14, y + m.dir.z * 14); c.stroke(); c.beginPath(); c.arc(x, y, blink ? 5 : 3.5, 0, Math.PI * 2); c.stroke(); }
   c.restore();
   c.strokeStyle = HUDC; c.fillStyle = HUDC; c.lineWidth = 1.3;
@@ -2101,7 +2101,7 @@ function drawHUD() {
     toScreen(t.pos, sp); if (sp.behind || sp.x < -40 || sp.x > W + 40 || sp.y < -40 || sp.y > H + 40) continue;
     const d = t.pos.distanceTo(P.pos), isCur = t === curTarget;
     const half = clamp(4000 / (d + 200), 9, 22) * s;
-    const col = isCur && locked ? WARN : t.ace ? AMBER : t.remote ? (NET.view && NET.view.mode === 'team' ? '#ff7a6b' : PCOL[t.color % 4]) : HUDC;
+    const col = isCur && locked ? WARN : t.ace ? AMBER : t.remote ? (NET.view && NET.view.mode === 'team' ? '#ff7a6b' : PCOL[t.color % MAXP]) : HUDC;
     c.strokeStyle = col; c.fillStyle = col; c.lineWidth = (isCur ? 2.2 : 1.3) * s;
     if (t.kind === 'air') { const q = half * .45; // corner brackets
       c.beginPath(); for (const [sx2, sy2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { c.moveTo(sp.x + sx2 * half, sp.y + sy2 * (half - q)); c.lineTo(sp.x + sx2 * half, sp.y + sy2 * half); c.lineTo(sp.x + sx2 * (half - q), sp.y + sy2 * half); } c.stroke();
@@ -2254,7 +2254,7 @@ function drawHUD() {
     const sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('PILOT            WIN  ', sx0, sy0);
     ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return;
       const name = me ? NET.callsign : o.label, alive = me ? P.alive : o.alive, wins = mt.w[mt.mode === 'team' && mt.tm ? 'T' + mt.tm[id] : id] || 0;
-      c.fillStyle = mt.mode === 'team' && mt.tm ? (mt.tm[id] ? '#ff7a6b' : '#7fd6ff') : PCOL[(me ? NET.color : o.color) % 4]; c.globalAlpha = alive || mt.ph === 'wait' ? 1 : .45;
+      c.fillStyle = mt.mode === 'team' && mt.tm ? (mt.tm[id] ? '#ff7a6b' : '#7fd6ff') : PCOL[(me ? NET.color : o.color) % MAXP]; c.globalAlpha = alive || mt.ph === 'wait' ? 1 : .45;
       c.fillText((me ? '▶ ' : '') + name.padEnd(14, ' ') + ' ' + '★'.repeat(wins).padEnd(2, '·') + (alive ? '  ●' : '  ×'), sx0, sy0 + (i + 1) * 17 * s); });
     c.globalAlpha = 1; c.fillStyle = HUDC; c.textAlign = 'left';
     if (mt.ph === 'count') { font(72); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = AMBER; c.fillText(String(Math.max(1, Math.ceil(mt.rl))), cx, cy - 60 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
@@ -2392,8 +2392,9 @@ function tutUpdate(dt) {
 }
 
 /* ================= multiplayer (room capability: presence-only sync) ================= */
-const PCOL = ['#7fd6ff', '#ffb35c', '#d78bff', '#ffe066'];
-const PBODY = [[0x8fb4cc, 0x2f6a8f], [0xc9a07a, 0x8a4a1c], [0xa596b8, 0x5c3a7a], [0xc2bb86, 0x8a7a1c]];
+const MAXP = 8; // players per room
+const PCOL = ['#7fd6ff', '#ffb35c', '#d78bff', '#ffe066', '#7dffa8', '#ff8fb8', '#b6c2ff', '#ffffff'];
+const PBODY = [[0x8fb4cc, 0x2f6a8f], [0xc9a07a, 0x8a4a1c], [0xa596b8, 0x5c3a7a], [0xc2bb86, 0x8a7a1c], [0x8fbf9c, 0x2f7a4a], [0xc79aaa, 0x8a2f4f], [0x9aa4c8, 0x3a4a8a], [0xd0d4d8, 0x555a60]];
 const NET = { api: null, room: null, name: '', me: null, callsign: 'KESTREL', color: 0, hits: [], hitSeq: 0, lastHit: {}, kills: 0, deaths: 0, deathSeq: 0, killedBy: null, killerName: '',
   flare: null, flareSeq: 0, mid: 0, sendT: 0, respawnT: 0 };
 const remotes = new Map();
@@ -2491,7 +2492,7 @@ function peerRoom(hostId) {
     const pr = new Peer(hostId); peer = pr; let done = false;
     pr.on('open', id => { done = true; myId = id; isHost = true; table.clear(); rebuild(); startLoop(); res(); });
     pr.on('connection', c => {
-      c.on('open', () => { if (conns.size >= 3) { try { c.send({ t: 'full' }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 400); return; } conns.set(c.peer, c); });
+      c.on('open', () => { if (conns.size >= MAXP - 1) { try { c.send({ t: 'full' }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 400); return; } conns.set(c.peer, c); });
       c.on('data', d => { if (d && d.t === 'p' && typeof d.s === 'number' && conns.has(c.peer)) setEntry(c.peer, d.p, d.s); rebuild(); });
       const drop = () => { conns.delete(c.peer); table.delete(c.peer); rebuild(); };
       c.on('close', drop); c.on('error', drop);
@@ -2573,7 +2574,7 @@ async function joinMatch(code) {
     let r;
     try { r = await api.join(name); } catch (e) {
       if (e && e.code === 'not_permitted') r = api;
-      else if (e && e.code === 'full') { if (code) { lobbyStatus('その部屋は満員です（4人まで）'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; } continue; }
+      else if (e && e.code === 'full') { if (code) { lobbyStatus('その部屋は満員です（8人まで）'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; } continue; }
       else if (e && (e.code === 'not_granted' || e.code === 'revoked')) { lobbyStatus('このclaude.aiのページでは、あなたはマルチプレイに参加できません（claude.aiへのログインと招待が必要）。GitHub Pages版のURLで遊んでね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
       else if (e && e.code === 'unsupported') { lobbyStatus('このブラウザはP2P通信（WebRTC）に対応していません。Chrome / Edge / Safari の最新版で開いてね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
       else if (NET.via === 'p2p' || NET.via === 'relay') { lobbyStatus('サーバーに接続できませんでした。ネットワーク（学校Wi-Fiの制限など）を確認して、もう一度試してね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false; NET.api = null; return; }
@@ -2582,8 +2583,8 @@ async function joinMatch(code) {
     try { await r.presence({ v: 1, rm: name, n: NET.callsign, al: 0, p: [0, 0, 0] }); } catch (e) { continue; }
     await sleep(1600);
     const others = r.peers().filter(pp => !pp.sameTab && pp.presence && pp.presence.rm === name && pp.presence.v === 1);
-    if (others.length <= 3 || code) { if (others.length > 3) { lobbyStatus('その部屋は満員です（4人まで）'); await netLeaveRoom(r, api); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
-      NET.room = r; NET.name = name; const used = new Set(others.map(pp => numv(pp.presence.c))); NET.color = [0, 1, 2, 3].find(i => !used.has(i)) ?? 0; startMulti(); return; }
+    if (others.length <= MAXP - 1 || code) { if (others.length > MAXP - 1) { lobbyStatus('その部屋は満員です（8人まで）'); await netLeaveRoom(r, api); $('#quickBtn').disabled = $('#codeBtn').disabled = false; return; }
+      NET.room = r; NET.name = name; const used = new Set(others.map(pp => numv(pp.presence.c))); NET.color = [...Array(MAXP).keys()].find(i => !used.has(i)) ?? 0; startMulti(); return; }
     await netLeaveRoom(r, api);
   }
   lobbyStatus('空いている部屋が見つかりませんでした。少し待ってからもう一度試してね。'); $('#quickBtn').disabled = $('#codeBtn').disabled = false;
@@ -2605,7 +2606,7 @@ function startMulti() {
   state = 'play'; missionTime = 0; score = 0; kills = 0; missionResult = null; shake = 0; timeScale = 1; slowmoT = 0;
   Object.assign(NET, { hits: [], hitSeq: 0, lastHit: {}, kills: 0, deaths: 0, deathSeq: 0, killedBy: null, killerName: '', flare: null, flareSeq: 0, sendT: 0 });
   // tint our jet to our slot colour
-  const pc = PBODY[NET.color % 4]; player.mesh.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHex() === 0x2d4a6a) o.material.color.setHex(pc[1]); });
+  const pc = PBODY[NET.color % MAXP]; player.mesh.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHex() === 0x2d4a6a) o.material.color.setHex(pc[1]); });
   Object.assign(NET, { mt: null, lastMt: null, mtSeen: -1, curPh: '', rdy: 0, spawnKey: '', spec: null, mode: NET.mode || 'ffa' });
   curTarget = null; lockT = 0; camView = 0;
   $('#lobby').hidden = true; $('#title').hidden = true;
@@ -2636,14 +2637,14 @@ const inRound = id => { const mt = NET.view; return !!(mt && (mt.ph === 'count' 
 function sanitizeMt(m) {
   if (!m || typeof m !== 'object' || !PHASES.includes(m.ph)) return null;
   const str = v => typeof v === 'string' ? v.slice(0, 40) : '';
-  const pl = Array.isArray(m.pl) ? m.pl.filter(x => typeof x === 'string').slice(0, 6).map(str) : [];
-  const tm = m.tm && typeof m.tm === 'object' ? Object.fromEntries(Object.entries(m.tm).slice(0, 6).map(([k, v]) => [str(k), v === 1 ? 1 : 0])) : null;
-  const w = m.w && typeof m.w === 'object' ? Object.fromEntries(Object.entries(m.w).slice(0, 8).map(([k, v]) => [str(k), clamp(numv(v), 0, 9)])) : {};
+  const pl = Array.isArray(m.pl) ? m.pl.filter(x => typeof x === 'string').slice(0, MAXP).map(str) : [];
+  const tm = m.tm && typeof m.tm === 'object' ? Object.fromEntries(Object.entries(m.tm).slice(0, MAXP).map(([k, v]) => [str(k), v === 1 ? 1 : 0])) : null;
+  const w = m.w && typeof m.w === 'object' ? Object.fromEntries(Object.entries(m.w).slice(0, MAXP + 2).map(([k, v]) => [str(k), clamp(numv(v), 0, 9)])) : {};
   return { s: numv(m.s), ph: m.ph, r: clamp(numv(m.r), 0, 9), rl: clamp(numv(m.rl), -5, 900), pl, tm, w, mode: m.mode === 'team' ? 'team' : m.mode === 'coop' ? 'coop' : 'ffa', win: str(m.win), mid: str(m.mid),
     wave: clamp(numv(m.wave), 0, 9), sc: clamp(numv(m.sc), 0, 1e7), res: m.res === 'win' ? 'win' : m.res === 'lose' ? 'lose' : '', df: ['easy', 'normal', 'hard'].includes(m.df) ? m.df : 'normal' };
 }
 function setupRound(mt, present) {
-  mt.pl = present.slice(0, 4);
+  mt.pl = present.slice(0, MAXP);
   if (mt.mode === 'team') { mt.tm = {}; mt.pl.forEach((id, i) => { mt.tm[id] = i % 2; }); } else mt.tm = null;
 }
 function leaderStep(dt) {
@@ -2716,12 +2717,12 @@ function updateMroomUI(force) {
   const now = performance.now(); if (!force && now - MROOM.t < 200) return; MROOM.t = now;
   const mt = NET.view, lead = roster()[0], amL = lead === NET.me, list = roster();
   $('#mrCode').textContent = 'ROOM ' + NET.name.replace(/^sky-/, '').toUpperCase();
-  $('#mrInfo').textContent = `接続: ${NET.via === 'claude' ? 'claude.ai' : NET.via === 'relay' ? 'リレー（' + (NET.broker || '') + '）' : NET.via === 'p2p' ? 'P2P' : 'テスト'}　·　${list.length} / 4 人` + (list.length < 2 ? (m0 => m0 === 'coop' ? '　·　1人でも「準備OK」で出撃できる' : '　·　相手を待っています。友達には同じルームコードを入れてもらってね')(roster()[0] === NET.me ? NET.mode : (NET.view ? NET.view.mode : 'ffa')) : '');
+  $('#mrInfo').textContent = `接続: ${NET.via === 'claude' ? 'claude.ai' : NET.via === 'relay' ? 'リレー（' + (NET.broker || '') + '）' : NET.via === 'p2p' ? 'P2P' : 'テスト'}　·　${list.length} / ${MAXP} 人` + (list.length < 2 ? (m0 => m0 === 'coop' ? '　·　1人でも「準備OK」で出撃できる' : '　·　相手を待っています。友達には同じルームコードを入れてもらってね')(roster()[0] === NET.me ? NET.mode : (NET.view ? NET.view.mode : 'ffa')) : '');
   const ul = $('#mrList'); ul.textContent = '';
   for (const id of list) {
     const me = id === NET.me, o = remotes.get(id), li = document.createElement('li');
     const name = me ? NET.callsign : o ? o.label : 'PILOT', rdy = me ? NET.rdy === 1 : !!(o && o.rdy), wins = mt && mt.w ? (mt.w[id] || 0) : 0;
-    const col = PCOL[(me ? NET.color : o ? o.color : 0) % 4];
+    const col = PCOL[(me ? NET.color : o ? o.color : 0) % MAXP];
     const a = document.createElement('span'); a.textContent = (id === lead ? '★ ' : '') + name + (me ? '（あなた）' : ''); a.style.color = col;
     const b = document.createElement('span'); b.textContent = rdy ? 'READY' : '待機中'; b.className = rdy ? 'ok' : '';
     li.append(a, b); ul.append(li);
@@ -2749,7 +2750,7 @@ function receiveHit(o, d, ai, flag) {
   if (player.hp <= 0) { player.hp = 0; netDie('被撃墜', o.peer); }
 }
 function makeRemote(peer, pr) {
-  const col = numv(pr.c) % 4, pc = PBODY[col];
+  const col = numv(pr.c) % MAXP, pc = PBODY[col];
   const as = Array.isArray(pr.as) ? pr.as : null, fr = as && PARTS.frame[numv(as[0])], col24 = v => clamp(Math.round(numv(v)), 0, 0xffffff);
   const look = as && as.length >= 8 ? { shape: fr ? fr.shape : 'std', body: col24(as[2]), dark: col24(as[3]), tail: col24(as[4]), armor: clamp(numv(as[5]), 0, 2),
     eng: (PARTS.engine[numv(as[6])] || PARTS.engine[0]).id, sp: (PARTS.special[numv(as[7])] || PARTS.special[0]).id } : { body: pc[0], dark: 0x3d4247, tail: pc[1] };
@@ -2765,6 +2766,7 @@ function removeRemote(o) {
 }
 function applyRemote(o, pr, updatedAt) {
   o.label = String(pr.n || 'PILOT').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12) || 'PILOT';
+  o.color = numv(pr.c) % MAXP;
   if (Array.isArray(pr.p) && Array.isArray(pr.q) && updatedAt !== o.upd) {
     o.upd = updatedAt; o.netPos.set(numv(pr.p[0]), numv(pr.p[1]), numv(pr.p[2]));
     o.netQuat.set(numv(pr.q[0]), numv(pr.q[1]), numv(pr.q[2]), numv(pr.q[3]) || 1).normalize();
@@ -2822,7 +2824,7 @@ function stepRemote(o, dt) {
 }
 function buildPresence() {
   const P = player, r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, r2 = v => Math.round(v * 100) / 100;
-  const m = []; for (const ms of missiles) if ((ms.owner === 'player' || NET.mt) && ms.nid && m.length < 16) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target === P ? NET.me : ms.target && ms.target.remote ? ms.target.peer : null]);
+  const m = []; for (const ms of missiles) if ((ms.owner === 'player' || NET.mt) && ms.nid && m.length < (remotes.size > 3 ? 10 : 16)) m.push([ms.nid, Math.round(ms.pos.x), Math.round(ms.pos.y), Math.round(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target === P ? NET.me : ms.target && ms.target.remote ? ms.target.peer : null]);
   return { v: 1, rm: NET.name, n: NET.callsign, c: NET.color, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
     s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp / P.maxHp * 100), mh: P.maxHp, as: (c => [LO.frame, LO.paint, c.body, c.dark, c.tail, LO.armor, LO.engine, LO.special])(paintColors()), lz: laser.on ? 1 : 0, al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
     g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-12), fl: NET.flare, rdy: NET.rdy, out: NET.out ? 1 : 0, mt: NET.mt, en: NET.mt && NET.mt.mode === 'coop' ? coopEnemyList() : null, fk: NET.mt && NET.mt.mode === 'coop' ? NET.flak : null };
@@ -2833,13 +2835,16 @@ function netUpdate(dt) {
   for (const p of peers) {
     if (p.sameTab) { NET.me = p.peer; continue; }
     const pr = p.presence; if (!pr || pr.v !== 1 || pr.rm !== NET.name || !Array.isArray(pr.p)) continue;
-    if (seen.size >= 6) break; seen.add(p.peer);
+    if (seen.size >= MAXP - 1) break; seen.add(p.peer);
     let o = remotes.get(p.peer);
     if (!o) { o = makeRemote(p.peer, pr); remotes.set(p.peer, o); showMsg(`${String(pr.n || 'PILOT').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12)} JOINED`, HUDD, 2); }
     applyRemote(o, pr, p.updatedAt);
   }
   for (const [peer, o] of remotes) if (!seen.has(peer)) { showMsg(`${o.label} LEFT`, HUDD, 2); removeRemote(o); remotes.delete(peer); for (const e of enemies) if (e.tgt === o) e.tgt = null; }
   for (const o of remotes.values()) stepRemote(o, dt);
+  // simultaneous joiners can pick the same colour: the later id moves to a free one
+  if ((NET.colT = (NET.colT || 0) - dt) <= 0) { NET.colT = 1.5;
+    if ([...remotes.values()].some(o => o.color === NET.color && o.peer < NET.me)) { const used = new Set([...remotes.values()].map(o => o.color)); const free = [...Array(MAXP).keys()].find(i => !used.has(i)); if (free != null) NET.color = free; } }
   const lead = remotes.get(roster()[0]);
   if (lead && lead.en) syncPuppets(lead.en, lead.upd); else if (puppets.size && (!lead || !lead.en)) { if (!NET.mt) clearPuppets(); }
   if (lead && lead.fk) syncFlak(lead.fk);
@@ -3093,8 +3098,8 @@ function coopEnemyList() {
   const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, out = [];
   for (const e of enemies) { if (!e.alive || !e.nid) continue;
     const mask = e.boss ? e.pods.reduce((m, q, i) => m | (q.alive ? 1 << i : 0), 0) : 0;
-    out.push([e.nid, TYPE_CODE(e), r1(e.pos.x), r1(e.pos.y), r1(e.pos.z), r3(e.dir.x), r3(e.dir.y), r3(e.dir.z), Math.round((e.roll || 0) * 100) / 100, Math.round(e.hp / e.maxHp * 100), mask]);
-    if (out.length >= 20) break; }
+    out.push([e.nid, TYPE_CODE(e), Math.round(e.pos.x), Math.round(e.pos.y), Math.round(e.pos.z), r3(e.dir.x), r3(e.dir.y), r3(e.dir.z), Math.round((e.roll || 0) * 100) / 100, Math.round(e.hp / e.maxHp * 100), mask]);
+    if (out.length >= 18) break; }
   return out;
 }
 function applyAIHit(nid, d, from, ram) {
@@ -3158,7 +3163,7 @@ function drawCoopHud(c, s, mt, pad, blink, font, cx, cy, P) {
   // wingmen (top-right)
   const ids = mt.pl.length ? mt.pl : roster(), sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('WINGMEN', sx0, sy0);
   ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return; const alive = me ? P.alive : o.alive, out = me ? NET.out : o.out, hp = me ? P.hp / P.maxHp * 100 : o.hp;
-    c.fillStyle = PCOL[(me ? NET.color : o.color) % 4]; c.globalAlpha = alive ? 1 : .45;
+    c.fillStyle = PCOL[(me ? NET.color : o.color) % MAXP]; c.globalAlpha = alive ? 1 : .45;
     c.fillText((me ? '▶ ' : '') + (me ? NET.callsign : o.label).padEnd(13, ' ') + (alive ? String(Math.round(hp)).padStart(4, ' ') + '%' : out ? '  OUT' : '  ---'), sx0, sy0 + (i + 1) * 17 * s); });
   c.globalAlpha = 1; c.fillStyle = HUDC; c.textAlign = 'left';
   // boss / lieutenant bar
