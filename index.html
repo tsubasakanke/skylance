@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。最大4人の対戦対応。">
+<meta name="description" content="SKYLANCE — ブラウザで遊べるアーケード空戦ゲーム。機体アセンブル・最大4人の対戦／協力プレイ対応。">
 <title>SKYLANCE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,6 +102,25 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 .tbar{height:4px;background:rgba(141,255,180,.15);margin-bottom:8px}.tbar i{display:block;height:100%;width:0;background:var(--hud);transition:width .15s}
 #tut small{font:11px var(--mono);color:var(--muted)}
 #tutFinal{gap:10px;margin-top:6px}
+/* hangar */
+.hangar{justify-content:flex-end;background:linear-gradient(90deg,rgba(4,9,11,0) 0%,rgba(4,9,11,.35) 45%,rgba(4,9,11,.8) 100%)}
+.hpanel{width:min(560px,100%);max-height:calc(100% - 8px);overflow:auto}
+.cat{margin:0 0 12px}.cat h3{font:700 11px var(--mono);letter-spacing:.18em;color:var(--muted);margin:0 0 6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.segb{appearance:none;border:1px solid var(--hud-dim);background:rgba(4,12,11,.5);color:var(--ink);font:600 13px var(--display);letter-spacing:.06em;padding:8px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline;min-width:0}
+.segb small{font:11px var(--mono);color:var(--muted)}
+.segb.on{border-color:var(--hud);background:rgba(141,255,180,.18);color:var(--hud)}
+.segb:focus-visible{outline:2px solid var(--hud);outline-offset:1px}
+.seg.paint .segb{width:38px;height:28px;padding:0;background:linear-gradient(135deg,var(--sw1) 0 62%,var(--sw2) 62%)}
+.seg.paint .segb.on{box-shadow:0 0 0 2px var(--ground),0 0 0 4px var(--hud)}
+.pdesc{font-size:12px!important;color:var(--muted)!important;margin:5px 0 0!important;line-height:1.5!important}
+#hgStats{display:grid;gap:6px;margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--hud-dim)}
+.stat{display:grid;grid-template-columns:52px 1fr 64px;gap:10px;align-items:center;font:12px var(--mono);color:var(--muted)}
+.stat i{display:block;height:6px;background:rgba(141,255,180,.12)}.stat b{display:block;height:100%;background:var(--hud)}
+.stat em{font-style:normal;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+.stat.over b{background:var(--warn)}.stat.over em{color:var(--warn)}
+#hgWarn{color:var(--warn)!important}
+#loSummary{font:11px var(--mono);color:var(--muted);margin:2px 0 0;letter-spacing:.04em}
 #mrList{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:6px}
 #mrList li{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--hud-dim);font:14px var(--mono);min-width:0}
 #mrList li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -143,6 +162,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
         <div><kbd>Shift</kbd>＋<kbd>Z</kbd>ハイG旋回</div>
         <div><kbd>X</kbd>ロック解除</div>
         <div><kbd>H</kbd>操作ガイド表示</div>
+        <div><kbd>G</kbd>特殊兵装に切替</div>
         <div><kbd>M</kbd>消音</div>
         <div><kbd>C</kbd>視点切替 / <kbd>P</kbd>ポーズ</div>
       </div>
@@ -157,7 +177,9 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
       </div>
       <div class="stack">
         <button class="btn" id="startBtn">出撃 — Sortie</button>
-        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">対戦（最大4人）</button></div>
+        <button class="btn ghost sm" id="hangarBtn">ハンガー（機体アセンブル）</button>
+        <p id="loSummary"></p>
+        <div class="row"><button class="btn ghost sm" id="tutBtn">チュートリアル</button><button class="btn ghost sm" id="multiBtn">対戦・協力（最大4人）</button></div>
       </div>
     </div>
   </div>
@@ -201,13 +223,23 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
   </div>
 </section>
 
+<section id="hangar" class="screen hangar" hidden>
+  <div class="panel hpanel">
+    <h2><span>Hangar · Assemble</span><span id="hgWeight"></span></h2>
+    <div id="hgParts"></div>
+    <div id="hgStats" aria-label="性能"></div>
+    <p class="note" id="hgWarn" role="status"></p>
+    <button class="btn" id="hgDone">決定</button>
+  </div>
+</section>
+
 <section id="mroom" class="screen" hidden>
   <div class="panel result">
     <h2><span>Briefing room</span><span id="mrCode"></span></h2>
     <p class="verdict">対戦待機中</p>
     <p class="note" id="mrInfo" role="status"></p>
     <ul id="mrList" aria-label="参加パイロット"></ul>
-    <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（2対2）</button></div>
+    <div class="row" id="mrModeRow"><button class="btn ghost sm" data-mode="ffa">個人戦</button><button class="btn ghost sm" data-mode="team">チーム戦（2対2）</button><button class="btn ghost sm" data-mode="coop">協力（ボス戦）</button></div>
     <p class="note" id="mrRule"></p>
     <div class="row"><button class="btn" id="readyBtn">準備OK</button><button class="btn ghost" id="mrLeave">退出</button></div>
   </div>
@@ -227,7 +259,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
   <div><span>ピッチ</span><kbd>W / S</kbd></div><div><span>ロール</span><kbd>A / D</kbd></div><div><span>ヨー</span><kbd>Q / E</kbd></div>
   <div><span>加速 / 減速</span><kbd>Shift / Z</kbd></div><div><span>ハイG旋回</span><kbd>Shift+Z</kbd></div>
   <h3>WEAPONS</h3>
-  <div><span>ミサイル</span><kbd>F</kbd></div><div><span>機銃</span><kbd>Space</kbd></div><div><span>ロック切替</span><kbd>R</kbd></div>
+  <div><span>ミサイル</span><kbd>F</kbd></div><div><span>特殊兵装切替</span><kbd>G</kbd></div><div><span>機銃</span><kbd>Space</kbd></div><div><span>ロック切替</span><kbd>R</kbd></div>
   <div><span>ロック解除</span><kbd>X</kbd></div><div><span>フレア</span><kbd>V</kbd></div>
   <h3>VIEW</h3>
   <div><span>ターゲット視点</span><kbd>T</kbd></div><div><span>視点切替</span><kbd>C</kbd></div><div><span>ガイド表示</span><kbd>H</kbd></div><div><span>ポーズ / 消音</span><kbd>P / M</kbd></div>
@@ -235,7 +267,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 
 <div id="touch" hidden>
   <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div></div>
-  <div id="topbtns"><button data-act="cam">CAM</button><button data-act="pause">II</button></div>
+  <div id="topbtns"><button data-act="weapon">WPN</button><button data-act="cam">CAM</button><button data-act="pause">II</button></div>
   <div id="tbtns">
     <button data-hold="brake">BRK</button><button data-act="target">TGT</button><button data-act="flare">FLR</button>
     <button data-hold="boost">BST</button><button data-hold="gun" class="big">GUN</button><button data-act="missile" class="big">MSL</button>
@@ -799,6 +831,7 @@ function onPress(code) {
   if (state !== 'play' || !player.alive) return;
   if (code === 'KeyX') { if (curTarget) { curTarget = null; lockT = 0; showMsg('LOCK RELEASED', HUDD, 1); } return; }
   if (code === 'KeyF' || code === 'KeyJ') playerFireMissile();
+  else if (code === 'KeyG') switchWeapon();
   else if (code === 'KeyR' || code === 'Tab') cycleTarget();
   else if (code === 'KeyV') deployFlares();
   else if (code === 'KeyC') { camView = (camView + 1) % 2; post.first = true; }
@@ -813,7 +846,7 @@ function readPad() {
   if (b(4)) out.yaw = -1; if (b(5)) out.yaw = 1;
   out.boost = b(7); out.brake = b(6); out.gun = b(2); out.look = b(3);
   const edge = i => b(i) && !padPrev[i];
-  if (state === 'play' && player.alive) { if (edge(0)) playerFireMissile(); if (edge(3)) cycleTarget(); if (edge(1)) deployFlares(); if (edge(8)) { camView = (camView + 1) % 2; post.first = true; } }
+  if (state === 'play' && player.alive) { if (edge(0)) playerFireMissile(); if (edge(12)) switchWeapon(); if (edge(3)) cycleTarget(); if (edge(1)) deployFlares(); if (edge(8)) { camView = (camView + 1) % 2; post.first = true; } }
   if (edge(9)) { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }
   padPrev = p.buttons.map((_, i) => b(i));
   return out;
@@ -849,13 +882,61 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
     e.preventDefault(); const a = b.dataset.act;
     if (a === 'pause') { if (state === 'play') pauseGame(); return; }
     if (state !== 'play' || !player.alive) return;
-    if (a === 'missile') playerFireMissile(); else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
+    if (a === 'weapon') switchWeapon(); else if (a === 'missile') playerFireMissile(); else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
   }));
 })();
 
 /* ================= game state ================= */
 let state = 'title', camView = 0, missionTime = 0, timeLeft = 720, score = 0, kills = 0, phase = 1, endTimer = 0, missionResult = null, shake = 0;
 const LOCK_TIME = 0.45, PYLON_RELOAD = 3.4;
+/* ---- assemble: parts catalogue. Weight of the fitted parts must stay within the frame's capacity. ---- */
+const PARTS = {
+  frame: [
+    { id: 'striker', n: 'STRIKER', d: 'バランスのとれた主力機。迷ったらこれ', hp: 1, turn: 1, spd: 1, cap: 100, sc: [1, 1, 1] },
+    { id: 'interceptor', n: 'INTERCEPTOR', d: '軽くて速い高機動機。装甲は薄い', hp: .75, turn: 1.14, spd: 1.1, cap: 80, sc: [.9, .95, 1.04] },
+    { id: 'fortress', n: 'FORTRESS', d: '重装甲の大型機。旋回は重いがとにかく硬い', hp: 1.45, turn: .84, spd: .93, cap: 140, sc: [1.16, 1.12, 1.1] }],
+  engine: [
+    { id: 'std', n: 'F110 標準', d: 'クセのない標準エンジン', thr: 1, w: 30 },
+    { id: 'turbo', n: 'TURBOFAN-X', d: '加速もアフターバーナーも強力。ただし重い', thr: 1.14, w: 45 },
+    { id: 'light', n: 'LIGHT CORE', d: '軽量。そのぶん推力はやや低い', thr: .92, w: 15 }],
+  special: [
+    { id: 'qaam', n: 'QAAM', d: '高機動ミサイル。射程は短いが急旋回で追いかける', w: 30, ammo: 18, cd: 1.2, range: 3600, cone: .6, lock: .35, turn: 4.2, spd: 720, acc: 450, life: 6.5, vd: 34 },
+    { id: 'hvaa', n: 'HVAA', d: '超高速・長射程ミサイル。曲がりにくいので正面から', w: 25, ammo: 16, cd: 2, range: 8000, cone: .32, lock: .9, turn: 1.25, spd: 1150, acc: 750, life: 9, vd: 46 },
+    { id: '4aam', n: '4AAM', d: '最大4目標を同時ロックして一斉発射', w: 40, ammo: 12, cd: 3.2, range: 5000, cone: .62, lock: .25, turn: 2.4, spd: 780, acc: 400, life: 9, vd: 30, multi: 4 }],
+  gun: [
+    { id: 'm61', n: 'M61 20mm', d: '連射速度が高く当てやすい', w: 10, rate: 26, dmg: 9, vd: 5 },
+    { id: 'gau', n: 'GAU 30mm', d: '連射は遅いが一発が重い', w: 20, rate: 14, dmg: 20, vd: 11 }],
+  armor: [
+    { id: 'none', n: 'なし', d: '追加装甲なし', w: 0, hp: 0, turn: 0 },
+    { id: 'a1', n: '追加装甲 I', d: '耐久 +15%／旋回 -3%', w: 20, hp: .15, turn: -.03 },
+    { id: 'a2', n: '追加装甲 II', d: '耐久 +35%／旋回 -7%', w: 40, hp: .35, turn: -.07 }],
+  paint: [
+    { n: 'GRAY GHOST', body: 0x9aa5ae, dark: 0x5f6870, tail: 0x2d4a6a }, { n: 'DESERT', body: 0xb9a882, dark: 0x7a6a4a, tail: 0x8a4a1c },
+    { n: 'NAVY', body: 0x5a6f8c, dark: 0x2e3a4c, tail: 0xd8d8d8 }, { n: 'CRIMSON', body: 0x8c3a3a, dark: 0x3a2020, tail: 0x1a1a1a },
+    { n: 'ARCTIC', body: 0xdfe6ea, dark: 0x9aa5ae, tail: 0x2d7ab8 }, { n: 'NIGHT', body: 0x26282d, dark: 0x15161a, tail: 0xd9b229 }]
+};
+const LO = { frame: 0, engine: 0, special: 0, gun: 0, armor: 0, paint: 0 };
+try { const sv = JSON.parse(localStorage.getItem('skylance-loadout') || '{}'); for (const k in LO) if (Number.isInteger(sv[k]) && PARTS[k][sv[k]]) LO[k] = sv[k]; } catch (e) {}
+const part = k => PARTS[k][LO[k]];
+function loadWeight() { return part('engine').w + part('special').w + part('gun').w + part('armor').w; }
+const overweight = () => loadWeight() > part('frame').cap;
+function stats() {
+  const f = part('frame'), a = part('armor'), e = part('engine'), g = part('gun');
+  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd, thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, sp: part('special') };
+}
+let ST = stats();
+// base HP per mode: versus lasts much longer than the solo campaign
+const hpBase = () => mode === 'multi' ? (NET.view && NET.view.mode === 'coop' ? 220 : 320) : 100;
+function refreshLoadout() {
+  ST = stats(); player.maxHp = Math.round(hpBase() * ST.hp);
+  player.sp = ST.sp.ammo; player.spCd = 0; player.wsel = 'msl'; player.mlocks = [];
+  return player.maxHp;
+}
+function rebuildPlayerMesh() {
+  const pt = part('paint'), sc = part('frame').sc, vis = player.mesh ? player.mesh.visible : true;
+  if (player.mesh) scene.remove(player.mesh);
+  player.mesh = makeJet({ body: pt.body, dark: pt.dark, tail: pt.tail }); player.mesh.scale.set(sc[0], sc[1], sc[2]); player.mesh.visible = vis; scene.add(player.mesh);
+}
 let curTarget = null, lockT = 0, locked = false, alertLevel = 0, lockWarn = false, gunTimer = 0, gunFiring = false, radioCooldown = 0, outTimer = 0;
 let timeScale = 1, slowmoT = 0, lastKillT = -99, chain = 0;
 let mode = 'mission'; // 'mission' | 'tutorial' | 'multi'
@@ -863,7 +944,7 @@ const opts = { beginner: false, lockMode: 'auto', guide: false };
 let launchAlertT = 0;
 const player = {
   pos: new V3(), vel: new V3(), velDir: new V3(0, 0, -1), quat: new Q4(), fwd: new V3(0, 0, -1), up: new V3(0, 1, 0), right: new V3(1, 0, 0),
-  speed: 250, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0,
+  speed: 250, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, maxHp: 100, sp: 0, spCd: 0, wsel: 'msl', mlocks: [], alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0,
   g: 1, maxG: 1, aoa: 0, agl: 1000, radius: 12, mesh: null, kind: 'player', prevSpeed: 250, brake: false
 };
 const enemies = [], grounds = [], missiles = [], decoys = [], debris = [], waves = [], popups = [], timers = [];
@@ -897,7 +978,7 @@ function setupWorld() {
     m.visible = false; scene.add(m); waves.push({ mesh: m, t: 0, dur: 1, size: 1 }); }
   const debGeo = new THREE.BoxGeometry(1.2, .25, 1.8), debMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c, roughness: .9 });
   for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(debGeo, debMat); m.visible = false; scene.add(m); debris.push({ mesh: m, vel: new V3(), spin: new V3(), life: 0 }); }
-  player.mesh = makeJet({ body: 0x9aa5ae, dark: 0x5f6870, tail: 0x2d4a6a }); scene.add(player.mesh);
+  rebuildPlayerMesh();
 }
 
 function clearMission() {
@@ -941,7 +1022,7 @@ function startMission() {
   clearMission();
   state = 'play'; missionTime = 0; timeLeft = 720; score = 0; kills = 0; phase = 1; endTimer = 0; missionResult = null; shake = 0; outTimer = 0;
   timeScale = 1; slowmoT = 0; lastKillT = -99; chain = 0;
-  Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
+  Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
   player.pos.set(0, 3000, 14500); player.quat.identity(); player.velDir.set(0, 0, -1); player.mesh.visible = true;
   player.mesh.userData.pylons.forEach(p => p.visible = true);
   curTarget = null; lockT = 0; locked = false; camView = 0; camOffset.set(0, 7, 32); post.first = true;
@@ -962,7 +1043,7 @@ function spawnPhase2() {
   radio('NIGHTJAR', '先頭の機体…黄色い尾翼。敵エース「ヴァンタ」だ。気を抜くな、ケストレル1。', 5);
   radio('VANTA', 'ケストレルとかいうのはお前か。俺の空で好き勝手やってくれたな。', 4.5);
 }
-function aliveTargets() { const out = []; for (const e of enemies) if (e.alive) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); return out; }
+function aliveTargets() { const out = []; for (const e of enemies) if (e.alive) out.push(e); for (const g of grounds) if (g.alive) out.push(g); if (mode === 'multi') { for (const o of remotes.values()) if (o.alive && !isAlly(o)) out.push(o); for (const q of puppets.values()) if (q.alive) out.push(q); } return out; }
 function checkPhase() {
   if (missionResult || mode !== 'mission') return;
   if (phase === 1 && aliveTargets().length === 0) after(1.5, spawnPhase2);
@@ -1035,12 +1116,19 @@ function updateStreaks() {
 }
 
 /* ================= combat ================= */
-function damage(t, amt, byMissile) {
+function damage(t, amt, byMissile, vamt) {
   if (!t.alive) return;
+  if (t.shield) { if (byMissile) showMsg('SHIELD', HUDD, 1); return; }
   if (t.remote) { // the victim's own client applies damage; we only report the hit
     if (isAlly(t) || !NET.view || NET.view.ph !== 'fight') return;
-    NET.hits.push([t.peer, byMissile ? 55 : 7, ++NET.hitSeq]); if (NET.hits.length > 10) NET.hits.shift();
+    NET.hits.push([t.peer, vamt != null ? vamt : byMissile ? 40 : 5, ++NET.hitSeq]); if (NET.hits.length > 12) NET.hits.shift();
     if (byMissile) { showMsg('HIT', HUDC); shake = Math.max(shake, .3); }
+    return;
+  }
+  if (t.puppet) { // co-op enemy simulated by the room leader: report the hit to them
+    const L = roster()[0]; if (!L) return;
+    NET.hits.push([L, Math.round(amt), ++NET.hitSeq, 0, t.id]); if (NET.hits.length > 12) NET.hits.shift();
+    t.myHitT = performance.now(); if (byMissile) { showMsg('HIT', HUDC); shake = Math.max(shake, .3); }
     return;
   }
   t.hp -= amt;
@@ -1051,7 +1139,7 @@ function destroy(t, byPlayer) {
   t.alive = false;
   explode(t.pos, t.kind === 'air' ? 1.25 : 1.6);
   if (byPlayer || t.kind === 'air') {
-    score += t.score; kills++;
+    score += t.score; kills++; if (mode === 'multi' && NET.mt && NET.mt.mode === 'coop') NET.mt.sc = (NET.mt.sc || 0) + t.score;
     chain = missionTime - lastKillT < 8 ? chain + 1 : 1; lastKillT = missionTime; if (mode === 'tutorial') tut.kills++;
     const bonus = chain > 1 ? 150 * (chain - 1) : 0; score += bonus;
     popups.push({ pos: t.pos.clone(), text: `+${t.score + bonus}`, sub: chain > 1 ? `CHAIN ×${chain}` : '', t: 1.8 });
@@ -1064,7 +1152,9 @@ function destroy(t, byPlayer) {
   // secondary blasts
   after(.18, () => explode(_v6.copy(t.pos).add(_v1.set(rand(-12, 12), rand(-6, 6), rand(-12, 12))), .55, false));
   after(.42, () => explode(_v6.copy(t.pos).add(_v1.set(rand(-18, 18), rand(-6, 10), rand(-18, 18))), .45, false));
-  if (t.kind === 'air') { t.dead = true; t.vel.copy(t.dir).multiplyScalar(t.speed * .75); spawnDebris(t.pos, t.vel, 9); }
+  if (t.pod) { t.removed = true; spawnDebris(t.pos, t.vel, 8); if (t.part) t.part.visible = false; t.parent.shield = t.parent.pods.some(q => q.alive); if (!t.parent.shield) { showMsg('SHIELD DOWN', AMBER, 2.5, true); radio('NIGHTJAR', 'シールド消失！本体を叩け！', 3.5, true); } }
+  else if (t.kind === 'air') { t.dead = true; t.vel.copy(t.dir).multiplyScalar(t.speed * .75); spawnDebris(t.pos, t.vel, t.boss ? 30 : 9);
+    if (t.boss) { for (const q of t.pods) { q.alive = false; q.removed = true; } for (let i = 1; i < 7; i++) after(i * .35, () => explode(_v6.copy(t.pos).add(_v1.set(rand(-60, 60), rand(-10, 10), rand(-40, 40))), 1.6)); radio('NIGHTJAR', 'LEVIATHAN の撃墜を確認！やったぞ！', 4, true); } }
   else {
     t.wreck = true; t.mesh.traverse(o => { if (o.isMesh) o.material = groundMat.wreck; }); t.mesh.scale.y = .45; spawnDebris(t.pos, _v1.set(0, 60, 0), 7);
     shockwave(t.pos, 140, .9, new THREE.Color(1.6, 1.0, .5));
@@ -1094,7 +1184,7 @@ function launchMissile(pylonMesh, startPos, dir, speed, target, owner, upVec, dr
   const m = { pos, prev: pos.clone(), dir: vel.clone().normalize(), vel, speed: vel.length(), target, owner, mesh, exh, life: owner === 'player' ? 9.5 : 11.5, age: 0,
     turn: owner === 'player' ? 2.5 : 1.55, maxSpeed: owner === 'player' ? 780 : 640, alive: true, ignite: dropT, lit: dropT <= 0, skip: owner === 'enemy' && !!pylonMesh };
   if (pylonMesh) pylonMesh.getWorldQuaternion(m.mesh.quaternion); else m.mesh.quaternion.setFromUnitVectors(NEG_Z, m.dir);
-  if (owner === 'player') m.nid = ++NET.mid;
+  if (owner === 'player' || mode === 'multi') m.nid = ++NET.mid;
   if (m.lit) ignite(m);
   missiles.push(m);
   const d = pos.distanceTo(camera.position); sfxNoise(.25, 400, clamp(1 - d / 2000, 0, 1) * .3, 'lowpass');
@@ -1108,14 +1198,39 @@ function ignite(m) {
   fire.emit(nx, ny, nz, m.vel.x * .8, m.vel.y * .8, m.vel.z * .8, .18, 4, 9, 1, .9, .6, 1, .5, .2, 1, 0);
   const d = m.pos.distanceTo(camera.position); sfxNoise(1.3, 1500, clamp(1 - d / 3000, 0, 1) * .6, 'bandpass', 350, .5);
 }
+function switchWeapon() {
+  const P = player; P.wsel = P.wsel === 'msl' ? 'sp' : 'msl'; P.mlocks = []; lockT = 0;
+  showMsg(P.wsel === 'sp' ? 'SP: ' + ST.sp.n : 'MSL', HUDC, 1); sfxTone(1200, 900, .06, .05, 'square');
+}
+function weaponParams(t) {
+  const sp = player.wsel === 'sp' ? ST.sp : null;
+  if (sp) return { range: sp.range * (t && t.kind === 'ground' ? .8 : 1), cone: sp.cone, lock: sp.lock };
+  return { range: RMAX[t ? t.kind : 'air'] || 5500, cone: .42, lock: LOCK_TIME };
+}
+function fireSpecial() {
+  const P = player, sp = ST.sp;
+  if (P.sp <= 0) { showMsg('NO SP AMMO', WARN); return; }
+  if (P.spCd > 0) return;
+  const targets = sp.multi ? P.mlocks.filter(t => t.alive) : [locked ? curTarget : null];
+  if (sp.multi && !targets.length) { showMsg('NO LOCK', HUDD, .8); return; }
+  P.sp--; P.spCd = sp.cd;
+  targets.forEach((t, k) => {
+    _v1.set((k % 2 ? 1 : -1) * (1.2 + (k >> 1) * 1.6), -1.3, 1).applyQuaternion(P.quat).add(P.pos);
+    const m = launchMissile(null, _v1, P.fwd, P.speed, t, 'player', P.up, .18 + k * .06, P.vel, 7);
+    Object.assign(m, { turn: sp.turn, maxSpeed: sp.spd, acc: sp.acc, life: sp.life, dmg: 100, vdmg: sp.vd });
+  });
+  P.mlocks = [];
+}
 function playerFireMissile() {
   if (player.frozen) return;
+  if (player.wsel === 'sp') { fireSpecial(); return; }
   if (player.msl <= 0) { showMsg('NO MISSILES', WARN); return; }
   let i = -1; for (let k = 0; k < 4; k++) { const c = (player.nextPylon + k) % 4; if (player.pylon[c] <= 0) { i = c; break; } }
   if (i < 0) return;
   player.pylon[i] = PYLON_RELOAD; player.nextPylon = (i + 1) % 4; player.msl--;
   const inner = i >= 2;
-  launchMissile(player.mesh.userData.pylons[i], player.pos, player.fwd, player.speed, locked ? curTarget : null, 'player', player.up, inner ? .3 : .06, player.vel, inner ? 9 : 0);
+  const mm = launchMissile(player.mesh.userData.pylons[i], player.pos, player.fwd, player.speed, locked ? curTarget : null, 'player', player.up, inner ? .3 : .06, player.vel, inner ? 9 : 0);
+  mm.dmg = 100; mm.vdmg = 40;
 }
 function deployFlares() {
   if (player.frozen || player.flares <= 0 || player.flareCd > 0) return;
@@ -1141,7 +1256,7 @@ function updateMissiles(dt) {
       if (m.age >= m.ignite) ignite(m);
       continue;
     }
-    m.speed = Math.min(m.maxSpeed, m.speed + 380 * dt);
+    m.speed = Math.min(m.maxSpeed, m.speed + (m.acc || 380) * dt);
     const T = m.target;
     if (T && T.alive === false) m.target = null;
     if (m.target && m.age > m.ignite + .12) {
@@ -1164,14 +1279,16 @@ function updateMissiles(dt) {
     fire.emit(m.pos.x - m.dir.x * 2.2, m.pos.y - m.dir.y * 2.2, m.pos.z - m.dir.z * 2.2, -m.dir.x * 30, -m.dir.y * 30, -m.dir.z * 30, .07, 2.4, 1.2, 1, .8, .5, 1, .5, .2, 1, 0);
     let hit = null;
     if (m.owner === 'player') {
-      if (m.target) { if (segPointDist(m.prev, m.pos, m.target.pos) < (m.target.kind === 'air' ? 20 : 30)) hit = m.target; }
+      if (m.target) { if (segPointDist(m.prev, m.pos, m.target.pos) < Math.max(m.target.kind === 'air' ? 20 : 30, (m.target.radius || 0) * .9)) hit = m.target; }
       else for (const t of enemies) if (t.alive && segPointDist(m.prev, m.pos, t.pos) < 18) { hit = t; break; }
       if (!hit && !m.target) for (const g of grounds) if (g.alive && segPointDist(m.prev, m.pos, g.pos) < 28) { hit = g; break; }
     } else if (player.alive && m.target === player && segPointDist(m.prev, m.pos, player.pos) < 17) hit = player;
+    else if (m.target && m.target.remote && m.target.alive && segPointDist(m.prev, m.pos, m.target.pos) < 17) {
+      explode(m.pos, .7); NET.hits.push([m.target.peer, 60, ++NET.hitSeq, 1]); if (NET.hits.length > 12) NET.hits.shift(); removeMissile(i); continue; }
     const gh = floorAt(m.pos.x, m.pos.z);
     if (hit) {
-      if (hit === player) { explode(m.pos, .7); damagePlayer(34); }
-      else { explode(m.pos, .6, false); damage(hit, 100, true); }
+      if (hit === player) { explode(m.pos, .7); damagePlayer(mode === 'multi' ? 60 : 34); }
+      else { explode(m.pos, .6, false); damage(hit, m.dmg || 100, true, m.vdmg); }
       removeMissile(i); continue;
     }
     if (m.pos.y < gh + 1) { explode(m.pos, .5, false); if (m.owner === 'player') { for (const g of grounds) if (g.alive && g.pos.distanceTo(m.pos) < 45) { damage(g, 100, true); break; } } removeMissile(i); continue; }
@@ -1186,7 +1303,7 @@ function damagePlayer(amt) {
   if (!immune()) player.hp -= amt; shake = Math.max(shake, 1.5); fx.red = 1; fx.flash = Math.max(fx.flash, .15);
   showMsg('DAMAGED', WARN, 1.6);
   if (player.hp <= 0) { player.hp = 0; killPlayer('被撃墜'); return; }
-  if (player.hp < 40) radio('NIGHTJAR', 'ケストレル1、被害が深刻だ！無理をするな！', 3.5, true);
+  if (player.hp / player.maxHp < .4) radio('NIGHTJAR', 'ケストレル1、被害が深刻だ！無理をするな！', 3.5, true);
   else radio('NIGHTJAR', pick(['被弾したか！？ケストレル1、持ちこたえろ！', 'ケストレル1、煙を吹いてるぞ！']), 3.5, true);
 }
 function recoverPlayer(reason) {
@@ -1194,7 +1311,7 @@ function recoverPlayer(reason) {
   P.pos.y = Math.max(P.pos.y, fl) + 700;
   const h = reason === '作戦空域離脱' ? Math.atan2(-P.pos.x, P.pos.z) : Math.atan2(P.fwd.x, -P.fwd.z);
   P.quat.setFromAxisAngle(UP, -h); P.fwd.set(0, 0, -1).applyQuaternion(P.quat); P.velDir.copy(P.fwd);
-  P.speed = Math.max(P.speed, 240); P.hp = 100; outTimer = 0; shake = .8; post.first = true;
+  P.speed = Math.max(P.speed, 240); P.hp = P.maxHp; outTimer = 0; shake = .8; post.first = true;
   showMsg('AUTO RECOVERY', AMBER, 2, true);
 }
 function killPlayer(reason, killer) {
@@ -1222,9 +1339,10 @@ function updateBullets(dt) {
     if (b.life > 0) {
       b.life -= dt; _v1.copy(b.pos); b.pos.addScaledVector(b.vel, dt);
       let dead = b.life <= 0;
-      if (!dead && !b.fake && mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; if (segPointDist(_v1, b.pos, o.pos) < 13) { damage(o, 7, false); hitSpark(b.pos); dead = true; break; } }
+      if (!dead && !b.fake && mode === 'multi') for (const q of puppets.values()) { if (q.alive && segPointDist(_v1, b.pos, q.pos) < Math.max(13, q.radius * .8)) { damage(q, ST.gunDmg, false); hitSpark(b.pos); dead = true; break; } }
+      if (!dead && !b.fake && mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; if (segPointDist(_v1, b.pos, o.pos) < 13) { damage(o, ST.gunDmg, false, ST.gunVd); hitSpark(b.pos); dead = true; break; } }
       if (!dead && !b.fake) for (const t of enemies) { if (!t.alive) continue; if (Math.abs(t.pos.x - b.pos.x) > 120 || Math.abs(t.pos.z - b.pos.z) > 120) continue;
-        if (segPointDist(_v1, b.pos, t.pos) < 13) { damage(t, 9, false); hitSpark(b.pos); dead = true; break; } }
+        if (segPointDist(_v1, b.pos, t.pos) < Math.max(13, (t.radius || 0) * .8)) { damage(t, ST.gunDmg, false); hitSpark(b.pos); dead = true; break; } }
       if (!dead && !b.fake) for (const g of grounds) { if (!g.alive) continue; if (Math.abs(g.pos.x - b.pos.x) > 120 || Math.abs(g.pos.z - b.pos.z) > 120) continue;
         if (segPointDist(_v1, b.pos, g.pos) < 22) { damage(g, 5, false); hitSpark(b.pos); dead = true; break; } }
       if (!dead && b.pos.y < floorAt(b.pos.x, b.pos.z)) { const w = b.pos.y < 1 && groundAt(b.pos.x, b.pos.z) < 0; if (Math.random() < .6) smoke.emit(b.pos.x, Math.max(b.pos.y, 0), b.pos.z, 0, w ? 22 : 7, 0, .9, 2, 9, w ? .95 : .55, w ? .97 : .5, w ? 1 : .42, .8, .8, .8, .7, 1); dead = true; }
@@ -1243,17 +1361,25 @@ function hitSpark(p) {
 }
 
 /* ================= AI ================= */
-function enemyMissileCount() { let n = 0; for (const m of missiles) if (m.owner === 'enemy' && m.target === player) n++; return n; }
+function enemyMissileCount() { let n = 0; for (const m of missiles) if (m.owner === 'enemy' && (mode === 'multi' || m.target === player)) n++; return n; }
+function aiTargets() { const out = []; if (player.alive && (mode !== 'multi' || inRound(NET.me))) out.push(player); if (mode === 'multi') for (const o of remotes.values()) if (o.alive) out.push(o); return out; }
+function pickAITarget(e) { let best = null, bd = Infinity; for (const t of aiTargets()) { const d = t.pos.distanceTo(e.pos); if (d < bd) { bd = d; best = t; } } return best; }
 function updateEnemy(e, dt) {
   if (e.dead) {
+    if (!e.mesh) { e.removed = true; return; }
     e.deadT += dt; e.vel.y -= 22 * dt; e.vel.multiplyScalar(1 - .15 * dt); e.pos.addScaledVector(e.vel, dt);
     e.mesh.position.copy(e.pos); e.mesh.rotateZ(e.spin * dt); e.mesh.rotateX(-.4 * dt);
     fire.emit(e.pos.x, e.pos.y, e.pos.z, rand(-3, 3), rand(-3, 3), rand(-3, 3), .55, 6, 14, 1, .7, .3, .8, .2, .05, 1, 1);
     smoke.emit(e.pos.x, e.pos.y, e.pos.z, rand(-3, 3), rand(0, 4), rand(-3, 3), 4, 6, 34, .13, .13, .13, .4, .4, .4, .75, .5);
-    if (e.pos.y < floorAt(e.pos.x, e.pos.z) + 2 || e.deadT > 9) { explode(e.pos, 1.3); scene.remove(e.mesh); e.removed = true; }
+    if (e.pos.y < floorAt(e.pos.x, e.pos.z) + 2 || e.deadT > (e.boss ? 6 : 9)) { explode(e.pos, e.boss ? 3 : 1.3); scene.remove(e.mesh); e.removed = true; }
     return;
   }
-  const toP = _v1.subVectors(player.pos, e.pos), dist = toP.length(); toP.divideScalar(dist || 1);
+  if (e.boss) { updateBoss(e, dt); return; }
+  if (e.pod) return; // moved by its boss
+  e.retgtT = (e.retgtT || 0) - dt;
+  if (!e.tgt || !e.tgt.alive || e.retgtT <= 0) { e.tgt = pickAITarget(e); e.retgtT = 4; }
+  const T = e.tgt || player;
+  const toP = _v1.subVectors(T.pos, e.pos), dist = toP.length(); toP.divideScalar(dist || 1);
   const desired = _v2; let targetSpeed = 230;
   e.stateT -= dt; e.missileCd -= dt;
   for (let k = 0; k < 4; k++) if (e.pyl[k] > 0) { e.pyl[k] -= dt; if (e.pyl[k] <= 0) e.mesh.userData.pylons[k].visible = true; }
@@ -1265,12 +1391,12 @@ function updateEnemy(e, dt) {
       e.state = 'evade'; e.stateT = rand(1.2, 2);
     }
     desired.copy(e.evadeDir); targetSpeed = 320;
-  } else if (!e.drone && player.alive && (dist < 10000 || e.state === 'attack' || e.wave === 2)) {
+  } else if (!e.drone && T.alive && (dist < 10000 || e.state === 'attack' || e.wave === 2)) {
     if (e.state === 'extend' && e.stateT > 0) { desired.copy(e.evadeDir); targetSpeed = 310; }
     else {
       e.state = 'attack';
       const lead = Math.min(dist / 700, 2.2);
-      desired.copy(player.pos).addScaledVector(player.vel, lead).sub(e.pos).normalize();
+      desired.copy(T.pos).addScaledVector(T.vel, lead).sub(e.pos).normalize();
       targetSpeed = dist > 3000 ? 300 : 250;
       if (dist < 450) { e.state = 'extend'; e.stateT = rand(3, 5); e.evadeDir.copy(e.dir).addScaledVector(_v3.set(rand(-1, 1), rand(0, .4), rand(-1, 1)), .8).normalize(); }
     }
@@ -1308,14 +1434,14 @@ function updateEnemy(e, dt) {
   if (e.trailT <= 0) { e.trailT = .05; _v3.copy(e.pos).addScaledVector(e.dir, -9);
     smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
     if (e.hp < e.maxHp * .6) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 2.5, 3, 16, .2, .2, .2, .45, .45, .45, .65, .5); }
-  if (!e.drone && player.alive && dist < 4000 && dist > 450 && e.dir.dot(toP) > .9 && e.missileCd <= 0 && enemyMissileCount() < (phase === 2 ? 3 : 2)) {
+  if (!e.drone && T.alive && dist < 4000 && dist > 450 && e.dir.dot(toP) > .9 && e.missileCd <= 0 && enemyMissileCount() < (mode === 'multi' ? 2 + aiTargets().length : phase === 2 ? 3 : 2)) {
     const k = e.pyl.findIndex(v => v <= 0);
     if (k >= 0) {
       _v4.set(0, 1, 0).applyQuaternion(e.mesh.quaternion);
-      launchMissile(e.mesh.userData.pylons[k], e.pos, e.dir, e.speed, player, 'enemy', _v4, k >= 2 ? .3 : .06, e.vel, k >= 2 ? 9 : 0);
+      launchMissile(e.mesh.userData.pylons[k], e.pos, e.dir, e.speed, T, 'enemy', _v4, k >= 2 ? .3 : .06, e.vel, k >= 2 ? 9 : 0);
       e.pyl[k] = 14;
       e.missileCd = e.ace ? rand(3.5, 5.5) : rand(8, 13);
-      if (radioCooldown <= 0 && Math.random() < .6) { radio('NIGHTJAR', pick(['ミサイル接近！回避しろ！', 'ケストレル1、ミサイルだ！ブレイク！', 'ロックされているぞ！']), 2.8, true); radioCooldown = 5; }
+      if (T === player && radioCooldown <= 0 && Math.random() < .6) { radio('NIGHTJAR', pick(['ミサイル接近！回避しろ！', 'ケストレル1、ミサイルだ！ブレイク！', 'ロックされているぞ！']), 2.8, true); radioCooldown = 5; }
     }
   }
 }
@@ -1358,8 +1484,20 @@ function updateTargeting(dt) {
   locked = false;
   if (curTarget && player.alive) {
     _v1.subVectors(curTarget.pos, player.pos); const d = _v1.length(), a = player.fwd.angleTo(_v1);
-    if (d < RMAX[curTarget.kind] && a < .42) lockT = Math.min(lockT + dt, LOCK_TIME); else lockT = Math.max(0, lockT - dt * 2);
-    locked = lockT >= LOCK_TIME;
+    const wp = weaponParams(curTarget);
+    if (d < wp.range && a < wp.cone) lockT = Math.min(lockT + dt, wp.lock); else lockT = Math.max(0, lockT - dt * 2);
+    locked = lockT >= wp.lock; player.lockNeed = wp.lock;
+  }
+  const P = player;
+  P.spCd = Math.max(0, (P.spCd || 0) - dt);
+  if (P.wsel === 'sp' && ST.sp.multi && P.alive) {
+    P.mlocks = P.mlocks.filter(t => t.alive && t.pos.distanceTo(P.pos) < ST.sp.range * 1.1 && P.fwd.angleTo(_v1.subVectors(t.pos, P.pos)) < ST.sp.cone * 1.4);
+    P.mlT = (P.mlT || 0) - dt;
+    if (P.mlocks.length < ST.sp.multi && P.mlT <= 0) {
+      let best = null, bs = Infinity;
+      for (const t of aliveTargets()) { if (P.mlocks.includes(t)) continue; _v1.subVectors(t.pos, P.pos); const d = _v1.length(), a = P.fwd.angleTo(_v1); if (d < ST.sp.range && a < ST.sp.cone && a * 3000 + d < bs) { bs = a * 3000 + d; best = t; } }
+      if (best) { P.mlocks.push(best); P.mlT = ST.sp.lock; sfxTone(1500, 1500, .05, .05, 'square'); }
+    }
   }
   alertLevel = 0; launchAlertT -= dt;
   for (const m of incomingThreats()) { const d = m.pos.distanceTo(player.pos); alertLevel = Math.max(alertLevel, clamp(1 - d / 4500, .05, 1));
@@ -1382,9 +1520,9 @@ function updatePlayer(dt) {
   const tgtT = highG ? .75 : inp.boost ? 1 : inp.brake ? 0 : .55;
   P.throttle += (tgtT - P.throttle) * (1 - Math.exp(-dt * 2.2));
   P.brake = inp.brake;
-  const pitchRate = 1.05 * auth * (highG ? 1.75 : inp.brake ? 1.12 : 1) * (P.cp < 0 ? .7 : 1);
+  const pitchRate = 1.05 * ST.turn * auth * (highG ? 1.75 : inp.brake ? 1.12 : 1) * (P.cp < 0 ? .7 : 1);
   P.quat.multiply(_q1.setFromAxisAngle(AX_X, P.cp * pitchRate * dt));
-  P.quat.multiply(_q1.setFromAxisAngle(AX_Z, -P.cr * 3.0 * auth * dt));
+  P.quat.multiply(_q1.setFromAxisAngle(AX_Z, -P.cr * 3.0 * ST.turn * auth * dt));
   P.quat.multiply(_q1.setFromAxisAngle(AX_Y, -P.cy * .45 * auth * dt));
   P.right.set(1, 0, 0).applyQuaternion(P.quat);
   const bank = Math.asin(clamp(-P.right.y, -1, 1));
@@ -1399,7 +1537,7 @@ function updatePlayer(dt) {
   P.velDir.y -= Math.max(0, 110 - P.speed) * .0009 * dt * 60; P.velDir.normalize();
   P.aoa = P.velDir.angleTo(P.fwd);
   const altF = clamp(1 - (P.pos.y - 6500) / 8000, .45, 1);
-  const thrust = (P.throttle < .55 ? P.throttle / .55 * 63 : 63 + (P.throttle - .55) / .45 * 100) * altF;
+  const thrust = (P.throttle < .55 ? P.throttle / .55 * 63 : 63 + (P.throttle - .55) / .45 * 100 * ST.thr) * altF * ST.spd * ST.spd;
   const drag = .00105 * P.speed * P.speed * (inp.brake && !highG ? 2.3 : 1) + P.aoa * P.speed * .25 + Math.abs(P.cp) * P.speed * .012 + (highG && Math.abs(P.cp) > .3 ? 115 : 0);
   P.prevSpeed = P.speed;
   P.speed = clamp(P.speed + (thrust - drag - 9.81 * P.velDir.y * 1.1) * dt, 30, 560);
@@ -1421,7 +1559,7 @@ function updatePlayer(dt) {
   P.flareCd = Math.max(0, P.flareCd - dt);
   gunFiring = inp.gun && P.gun > 0;
   ud.muzzle.visible = gunFiring && Math.random() < .7; if (ud.muzzle.visible) ud.muzzle.scale.setScalar(rand(1.6, 3));
-  if (gunFiring) { gunTimer -= dt; while (gunTimer <= 0) { fireBullet(); gunTimer += 1 / 26; } shake = Math.max(shake, .14); } else gunTimer = 0;
+  if (gunFiring) { gunTimer -= dt; while (gunTimer <= 0) { fireBullet(); gunTimer += 1 / ST.gunRate; } shake = Math.max(shake, .14); } else gunTimer = 0;
   // vapor: wingtips and wing-root vortices under G
   if (P.g > 4.8 || highG || (P.agl < 60 && P.speed > 250)) {
     const v = highG ? 1 : clamp((P.g - 4.8) / 3, .3, 1); if (highG) shake = Math.max(shake, .22);
@@ -1439,8 +1577,8 @@ function updatePlayer(dt) {
     shake = Math.max(shake, .6); fx.flash = Math.max(fx.flash, .08); sfxNoise(1.4, 260, .7, 'lowpass', 40); showMsg('SUPERSONIC', HUDD, 1.2);
   }
   if (P.throttle > .85) { _v1.set(0, 0, 10.5).applyQuaternion(P.quat).add(P.pos); fire.emit(_v1.x, _v1.y, _v1.z, P.vel.x * .3, P.vel.y * .3, P.vel.z * .3, .09, 1.8, 3.2, 1, .6, .3, .6, .2, .05, .8, 0); }
-  if (P.hp < 60) { _v1.set(0, .5, 8).applyQuaternion(P.quat).add(P.pos); smoke.emit(_v1.x, _v1.y, _v1.z, rand(-2, 2), rand(-2, 2), rand(-2, 2), 2.2, 2, 10, .22, .22, .22, .45, .45, .45, P.hp < 35 ? .8 : .5, .4);
-    if (P.hp < 35 && Math.random() < .5) fire.emit(_v1.x, _v1.y, _v1.z, 0, 0, 0, .2, 1.5, 3, 1, .6, .2, .8, .2, 0, .9, 0); }
+  if (P.hp / P.maxHp < .6) { _v1.set(0, .5, 8).applyQuaternion(P.quat).add(P.pos); smoke.emit(_v1.x, _v1.y, _v1.z, rand(-2, 2), rand(-2, 2), rand(-2, 2), 2.2, 2, 10, .22, .22, .22, .45, .45, .45, P.hp / P.maxHp < .35 ? .8 : .5, .4);
+    if (P.hp / P.maxHp < .35 && Math.random() < .5) fire.emit(_v1.x, _v1.y, _v1.z, 0, 0, 0, .2, 1.5, 3, 1, .6, .2, .8, .2, 0, .9, 0); }
   const r = Math.hypot(P.pos.x, P.pos.z);
   if (r > 17500) { outTimer += dt; if (outTimer > 15) killPlayer('作戦空域離脱'); } else outTimer = Math.max(0, outTimer - dt);
   return inp;
@@ -1451,7 +1589,7 @@ const camOffset = new V3(0, 7, 32), camUp = new V3(0, 1, 0); let lookingAtTarget
 function updateCamera(dt, inp) {
   const P = player;
   const wasLook = lookingAtTarget; lookingAtTarget = !!(inp && inp.look && curTarget && P.alive); if (wasLook !== lookingAtTarget) post.first = true;
-  if (state === 'title' || state === 'mlobby') {
+  if (state === 'title' || state === 'mlobby' || state === 'hangar') {
     const t = performance.now() / 1000;
     P.mesh.position.copy(P.pos); P.mesh.quaternion.copy(P.quat); P.mesh.visible = true;
     animateJet(P.mesh, Math.sin(t * 1.3) * .6, Math.sin(t * .9) * .7, Math.sin(t * .7) * .5, 0, 0, .55 + Math.max(0, Math.sin(t * .5)) * .45, dt, t);
@@ -1520,6 +1658,8 @@ function drawRadar(c, x0, y0, rr, s, blink) {
   for (const e of enemies) { if (!e.alive) continue; let x = (e.pos.x - P.pos.x) * k, y = (e.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
     c.fillStyle = e === curTarget && blink ? '#fff' : e.ace ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(e.dir.x, -e.dir.z)); c.beginPath(); c.moveTo(0, -6 * s); c.lineTo(4 * s, 4 * s); c.lineTo(-4 * s, 4 * s); c.closePath(); c.fill(); c.restore(); }
   for (const m of missiles) { const x = (m.pos.x - P.pos.x) * k, y = (m.pos.z - P.pos.z) * k; c.fillStyle = m.owner === 'enemy' ? (blink ? WARN : '#fff') : HUDC; c.fillRect(x - 1.5, y - 1.5, 3, 3); }
+  for (const q of puppets.values()) { if (!q.alive) continue; let x = (q.pos.x - P.pos.x) * k, y = (q.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
+    const z = q.code === 'B' ? 2 : q.code === 'E' ? .6 : 1; c.fillStyle = q === curTarget && blink ? '#fff' : q.ace || q.code === 'B' ? AMBER : WARN; c.save(); c.translate(x, y); c.rotate(Math.atan2(q.dir.x, -q.dir.z)); c.beginPath(); c.moveTo(0, -6 * s * z); c.lineTo(4 * s * z, 4 * s * z); c.lineTo(-4 * s * z, 4 * s * z); c.closePath(); c.fill(); c.restore(); }
   if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive) continue; let x = (o.pos.x - P.pos.x) * k, y = (o.pos.z - P.pos.z) * k; const l = Math.hypot(x, y); if (l > rr - 4) { x *= (rr - 4) / l; y *= (rr - 4) / l; }
     c.fillStyle = o === curTarget && blink ? '#fff' : PCOL[o.color % 4]; c.save(); c.translate(x, y); c.rotate(Math.atan2(o.dir.x, -o.dir.z)); c.beginPath(); c.moveTo(0, -7 * s); c.lineTo(5 * s, 5 * s); c.lineTo(-5 * s, 5 * s); c.closePath(); c.fill(); c.restore();
     for (const rm of o.missiles.values()) { const mx = (rm.pos.x - P.pos.x) * k, my = (rm.pos.z - P.pos.z) * k; c.fillStyle = rm.tgt === NET.me ? (blink ? WARN : '#fff') : PCOL[o.color % 4]; c.fillRect(mx - 2, my - 2, 4, 4); } }
@@ -1564,7 +1704,7 @@ function drawCockpit(c, s) {
 }
 function drawHUD() {
   const c = hx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
-  if (state === 'title' || state === 'result' || state === 'mlobby') return;
+  if (state === 'title' || state === 'result' || state === 'mlobby' || state === 'hangar') return;
   const s = clamp(Math.min(W, H) / 820, .58, 1.25), cx = W / 2, cy = H / 2, P = player, now = performance.now() / 1000;
   const blink = Math.floor(now * 4) % 2 === 0;
   const font = (px, f = MONO) => { c.font = `${Math.round(px * s)}px ${f}`; };
@@ -1630,6 +1770,9 @@ function drawHUD() {
     // time to impact of our own missiles en route
     let tti = Infinity; for (const m of missiles) if (m.owner === 'player' && m.target === t && m.lit) tti = Math.min(tti, m.pos.distanceTo(t.pos) / Math.max(m.speed, 1));
     if (tti < 30) { c.fillStyle = HUDC; c.textBaseline = 'top'; c.fillText('MSL ' + tti.toFixed(1), sp.x + half + 5 * s, sp.y + half + 11 * s); }
+    const pct = t.puppet ? t.hpPct : t.remote ? t.hp : (t.boss || t.pod || t.ace || mode === 'multi') && t.maxHp ? t.hp / t.maxHp * 100 : -1;
+    if (pct >= 0) { const bw = half * 2; c.globalAlpha = .35; c.fillRect(sp.x - half, sp.y + half + 4 * s, bw, 3 * s); c.globalAlpha = 1; c.fillRect(sp.x - half, sp.y + half + 4 * s, bw * clamp(pct / 100, 0, 1), 3 * s); }
+    if (P.wsel === 'sp' && P.mlocks.includes(t)) { const r = half + 9 * s; c.strokeStyle = WARN; c.lineWidth = 2 * s; c.beginPath(); c.moveTo(sp.x, sp.y - r); c.lineTo(sp.x + r, sp.y); c.lineTo(sp.x, sp.y + r); c.lineTo(sp.x - r, sp.y); c.closePath(); c.stroke(); c.strokeStyle = col; }
   }
   if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive || !isAlly(o)) continue; toScreen(o.pos, sp); if (sp.behind || sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H) continue;
     c.fillStyle = c.strokeStyle = '#7fd6ff'; c.lineWidth = 1.6 * s; c.beginPath(); c.moveTo(sp.x, sp.y - 10 * s); c.lineTo(sp.x + 9 * s, sp.y + 6 * s); c.lineTo(sp.x - 9 * s, sp.y + 6 * s); c.closePath(); c.stroke();
@@ -1639,7 +1782,7 @@ function drawHUD() {
     toScreen(curTarget.pos, sp);
     const on = !sp.behind && sp.x > 0 && sp.x < W && sp.y > 0 && sp.y < H;
     if (on && lockT > 0) {
-      const f = lockT / LOCK_TIME, lx = lerp(rcx, sp.x, f), ly = lerp(rcy, sp.y, f), r = 22 * s;
+      const f = lockT / (player.lockNeed || LOCK_TIME), lx = lerp(rcx, sp.x, f), ly = lerp(rcy, sp.y, f), r = 22 * s;
       c.strokeStyle = c.fillStyle = locked ? WARN : HUDC; c.lineWidth = 2 * s;
       c.beginPath(); c.moveTo(lx, ly - r); c.lineTo(lx + r, ly); c.lineTo(lx, ly + r); c.lineTo(lx - r, ly); c.closePath(); c.stroke();
       if (locked) { font(13); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText('LOCK', lx, ly + r + 4 * s); }
@@ -1755,6 +1898,8 @@ function drawHUD() {
     c.fillText('TRAINING  ·  ' + (tut.i + 1) + '/' + TUT.length, pad, pad);
   } else {
     const mt = NET.view || { ph: 'wait', r: 0, rl: 0, pl: [], w: {}, mode: 'ffa' };
+    if (mt.mode === 'coop') drawCoopHud(c, s, mt, pad, blink, font, cx, cy, P);
+    else {
     c.fillText(`VERSUS · ${mt.mode === 'team' ? 'TEAM' : 'SURVIVAL'} · ROUND ${mt.r}  ·  ROOM ` + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP);
     c.fillText(mt.mode === 'team' ? '敵チームを全滅させろ（2ラウンド先取）' : '最後まで生き残れ（2ラウンド先取）', pad, pad + 18 * s);
     if (mt.ph === 'fight') { font(22); c.fillText(fmtTime(Math.max(0, mt.rl)), pad, pad + 38 * s); }
@@ -1770,6 +1915,7 @@ function drawHUD() {
     if (!P.alive && (mt.ph === 'fight' || mt.ph === 'rend' || mt.ph === 'count')) { font(22); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = WARN;
       c.fillText(mt.pl.includes(NET.me) ? 'SHOT DOWN' : 'SPECTATING', cx, 120 * s); font(14, JP); c.fillStyle = '#eaf3ee';
       c.fillText((NET.killerName && mt.pl.includes(NET.me) ? NET.killerName + ' に撃墜された　·　' : '') + '観戦中' + (NET.spec ? '：' + NET.spec.label : '') + '　（R で切替）', cx, 148 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
+    }
   }
 
   // radar
@@ -1779,17 +1925,18 @@ function drawHUD() {
   // weapons & damage panel
   const wx = cockpit && mfd ? mfd.rx + mfd.mw - 6 : W - pad, wy = cockpit && mfd ? mfd.my + mfd.mw * .76 : H - pad - (isTouch ? 170 * s + 60 : 0);
   c.textAlign = 'right'; c.textBaseline = 'bottom'; font(15);
-  const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN], [`MSL ${P.msl}`, P.msl ? HUDC : WARN],
+  const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN],
+    [(P.wsel === 'sp' ? '▶' : '  ') + ST.sp.n + ' ' + P.sp + (P.spCd > 0 ? ' ·' : ''), P.wsel === 'sp' ? AMBER : HUDD], [(P.wsel === 'msl' ? '▶' : '  ') + `MSL ${P.msl}`, P.msl ? (P.wsel === 'msl' ? HUDC : HUDD) : WARN],
     [(curTarget && curTarget.kind === 'ground' ? 'AGM' : 'AAM') + (opts.lockMode === 'manual' ? ' · LOCK MAN' : ' · LOCK AUTO'), HUDD]];
   lines.forEach(([t, col], i) => { c.fillStyle = col; c.fillText(t, wx, wy - i * 21 * s); });
   // pylon status (4 stations)
-  const py0 = wy - 5 * 21 * s - 10 * s;
+  const py0 = wy - 6 * 21 * s - 10 * s;
   const stX = [-3, 3, -1.4, 1.4];
   for (let i = 0; i < 4; i++) { const ready = P.pylon[i] <= 0 && P.msl > 0, bx = wx - 52 * s + stX[i] * 13 * s, by = py0 - 18 * s;
     c.strokeStyle = HUDC; c.fillStyle = ready ? HUDC : 'rgba(141,255,180,.25)'; c.strokeRect(bx - 3 * s, by, 6 * s, 16 * s);
     if (ready) c.fillRect(bx - 3 * s + 1, by + 1, 6 * s - 2, 16 * s - 2); else { const f = 1 - P.pylon[i] / PYLON_RELOAD; c.fillStyle = HUDC; c.fillRect(bx - 3 * s + 1, by + 16 * s - 1 - (16 * s - 2) * f, 6 * s - 2, (16 * s - 2) * f); } }
   // damage silhouette
-  const dmg = 100 - P.hp, dcol = dmg < 34 ? HUDC : dmg < 67 ? AMBER : WARN;
+  const dmg = (1 - P.hp / P.maxHp) * 100, dcol = dmg < 34 ? HUDC : dmg < 67 ? AMBER : WARN;
   drawPlaneIcon(c, wx - 130 * s, py0 - 10 * s, 1.5 * s, dcol);
   c.fillStyle = dcol; font(13); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(`DMG ${Math.round(dmg)}%`, wx - 130 * s, py0 + 18 * s);
   c.fillStyle = HUDC;
@@ -1872,7 +2019,7 @@ function tutMissile() {
 function startTutorial() {
   mode = 'tutorial'; clearMission();
   state = 'play'; missionTime = 0; score = 0; kills = 0; missionResult = null; shake = 0; outTimer = 0; timeScale = 1; slowmoT = 0;
-  Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
+  Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
   player.pos.set(0, 3000, 14500); player.quat.identity(); player.velDir.set(0, 0, -1); player.mesh.visible = true; player.mesh.userData.pylons.forEach(p => { p.visible = true; p.scale.setScalar(1); });
   curTarget = null; lockT = 0; locked = false; camView = 0; camOffset.set(0, 7, 32); post.first = true;
   $('#title').hidden = true; $('#result').hidden = true; $('#pause').hidden = true; $('#touch').hidden = !isTouch;
@@ -2102,7 +2249,7 @@ function respawnPlayer() {
   const P = player, a = rand(0, Math.PI * 2), r = rand(7000, 10000);
   P.pos.set(Math.sin(a) * r, 3000 + rand(-300, 500), Math.cos(a) * r);
   P.quat.setFromAxisAngle(UP, Math.atan2(P.pos.x, P.pos.z)); P.fwd.set(0, 0, -1).applyQuaternion(P.quat); P.velDir.copy(P.fwd);
-  Object.assign(P, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], flareCd: 0 });
+  Object.assign(P, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], flareCd: 0 });
   P.mesh.visible = true; P.mesh.userData.pylons.forEach(p => { p.visible = true; p.scale.setScalar(1); }); camOffset.set(0, 7, 32); post.first = true; outTimer = 0;
 }
 function startMulti() {
@@ -2128,7 +2275,7 @@ function spawnForRound(mt) {
   if (mt.mode === 'team' && mt.tm) { const t = mt.tm[NET.me] || 0, mates = mt.pl.filter(id => (mt.tm[id] || 0) === t), k = mates.indexOf(NET.me); a = t * Math.PI + (k - (mates.length - 1) / 2) * .18; }
   const r = 6500; P.pos.set(Math.sin(a) * r, 3000, Math.cos(a) * r);
   P.quat.setFromAxisAngle(UP, Math.atan2(P.pos.x, P.pos.z)); P.fwd.set(0, 0, -1).applyQuaternion(P.quat); P.velDir.copy(P.fwd);
-  Object.assign(P, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, alive: true, frozen: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], flareCd: 0 });
+  Object.assign(P, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, frozen: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], flareCd: 0 });
   P.mesh.visible = true; P.mesh.userData.pylons.forEach(p => { p.visible = true; p.scale.setScalar(1); }); camOffset.set(0, 7, 32); post.first = true; outTimer = 0;
   for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; curTarget = null; lockT = 0;
 }
@@ -2136,7 +2283,7 @@ function spawnForRound(mt) {
 // publishes the match state in its presence; everyone follows it.
 const PHASES = ['wait', 'count', 'fight', 'rend', 'end'];
 function roster() { return [NET.me, ...remotes.keys()].filter(Boolean).sort(); }
-const isAlly = o => { const mt = NET.view; return !!(mt && mt.mode === 'team' && mt.tm && o.peer in mt.tm && mt.tm[o.peer] === mt.tm[NET.me]); };
+const isAlly = o => { const mt = NET.view; return !!(mt && ((mt.mode === 'coop' && o.remote) || (mt.mode === 'team' && mt.tm && o.peer in mt.tm && mt.tm[o.peer] === mt.tm[NET.me]))); };
 const inRound = id => { const mt = NET.view; return !!(mt && (mt.ph === 'count' || mt.ph === 'fight' || mt.ph === 'rend') && mt.pl.includes(id)); };
 function sanitizeMt(m) {
   if (!m || typeof m !== 'object' || !PHASES.includes(m.ph)) return null;
@@ -2144,7 +2291,8 @@ function sanitizeMt(m) {
   const pl = Array.isArray(m.pl) ? m.pl.filter(x => typeof x === 'string').slice(0, 6).map(str) : [];
   const tm = m.tm && typeof m.tm === 'object' ? Object.fromEntries(Object.entries(m.tm).slice(0, 6).map(([k, v]) => [str(k), v === 1 ? 1 : 0])) : null;
   const w = m.w && typeof m.w === 'object' ? Object.fromEntries(Object.entries(m.w).slice(0, 8).map(([k, v]) => [str(k), clamp(numv(v), 0, 9)])) : {};
-  return { s: numv(m.s), ph: m.ph, r: clamp(numv(m.r), 0, 9), rl: clamp(numv(m.rl), -5, 600), pl, tm, w, mode: m.mode === 'team' ? 'team' : 'ffa', win: str(m.win), mid: str(m.mid) };
+  return { s: numv(m.s), ph: m.ph, r: clamp(numv(m.r), 0, 9), rl: clamp(numv(m.rl), -5, 900), pl, tm, w, mode: m.mode === 'team' ? 'team' : m.mode === 'coop' ? 'coop' : 'ffa', win: str(m.win), mid: str(m.mid),
+    wave: clamp(numv(m.wave), 0, 9), sc: clamp(numv(m.sc), 0, 1e7), res: m.res === 'win' ? 'win' : m.res === 'lose' ? 'lose' : '' };
 }
 function setupRound(mt, present) {
   mt.pl = present.slice(0, 4);
@@ -2155,8 +2303,9 @@ function leaderStep(dt) {
   const aliveOf = id => id === NET.me ? player.alive : !!(remotes.get(id) && remotes.get(id).alive);
   const readyOf = id => id === NET.me ? NET.rdy === 1 : !!(remotes.get(id) && remotes.get(id).rdy);
   const go = (ph, rl) => { mt.ph = ph; mt.rl = rl; mt.s++; };
-  if (mt.ph === 'wait') { mt.mode = NET.mode; if (present.length >= 2 && present.every(readyOf)) { mt.r = 1; mt.w = {}; mt.win = ''; mt.mid = Math.random().toString(36).slice(2, 8); setupRound(mt, present); go('count', 4); } }
-  else if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) go('fight', 240); }
+  if (mt.ph === 'wait') { mt.mode = NET.mode; if (present.length >= (mt.mode === 'coop' ? 1 : 2) && present.every(readyOf)) { mt.r = 1; mt.w = {}; mt.win = ''; mt.wave = 0; mt.sc = 0; mt.res = ''; mt.mid = Math.random().toString(36).slice(2, 8); setupRound(mt, present); go('count', 4); } return; }
+  if (mt.mode === 'coop') { coopLeaderStep(mt, dt, go); return; }
+  if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) go('fight', 240); }
   else if (mt.ph === 'fight') {
     mt.rl -= dt; const pl = mt.pl.filter(id => present.includes(id)), alive = pl.filter(aliveOf);
     let done = false, winner = '';
@@ -2182,13 +2331,17 @@ function onPhase(mt) {
     $('#mroom').hidden = true; $('#touch').hidden = !isTouch; if (state === 'mlobby') { state = 'play'; setGuide(opts.guide); }
     if (inPl && NET.spawnKey !== key) { NET.spawnKey = key; spawnForRound(mt); }
     else if (!inPl && NET.spawnKey !== key) { NET.spawnKey = key; player.alive = false; player.mesh.visible = false; showMsg('SPECTATING', HUDD, 2); }
-    if (mt.ph === 'count') { showMsg(`ROUND ${mt.r}`, HUDC, 3, true); if (mt.r === 1) radio('NIGHTJAR', mt.mode === 'team' ? 'チーム戦開始。味方と連携して敵チームを全滅させろ。' : 'バトルロイヤル開始。最後まで飛んでいた者が勝者だ。', 4, true); }
+    if (mt.ph === 'count' && mt.mode === 'coop') { NET.seenWave = 0; showMsg('CO-OP MISSION', HUDC, 3, true); radio('NIGHTJAR', '協力作戦開始。全4ウェーブ、途中で大型目標が出現する。互いに援護しろ。', 4.5, true); }
+    else if (mt.ph === 'count') { showMsg(`ROUND ${mt.r}`, HUDC, 3, true); if (mt.r === 1) radio('NIGHTJAR', mt.mode === 'team' ? 'チーム戦開始。味方と連携して敵チームを全滅させろ。' : 'バトルロイヤル開始。最後まで飛んでいた者が勝者だ。', 4, true); }
     else { player.frozen = false; showMsg('FIGHT!', AMBER, 1.6, true); sfxTone(440, 880, .4, .2, 'sawtooth'); }
     return;
   }
   if (mt.ph === 'rend') { const n = winnerName(mt.win);
     showMsg(mt.win ? (iWon(mt.win) ? 'ROUND WIN' : `ROUND → ${n}`) : 'DRAW', iWon(mt.win) ? AMBER : HUDC, 4, true);
     radio('NIGHTJAR', mt.win ? `ラウンド${mt.r}、勝者は ${n}。` : `ラウンド${mt.r}は引き分けだ。`, 3.5, true); return; }
+  if (mt.ph === 'end' && mt.mode === 'coop') {
+    showMsg(mt.res === 'win' ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', mt.res === 'win' ? AMBER : WARN, 8, true);
+    radio('NIGHTJAR', mt.res === 'win' ? `全ウェーブ突破！チームスコア ${mt.sc}。最高の連携だった。` : '時間切れだ…全機、撤退せよ。', 5, true); return; }
   if (mt.ph === 'end') { const n = winnerName(mt.win);
     showMsg(iWon(mt.win) ? 'VICTORY' : mt.win ? `WINNER ${n}` : 'MATCH OVER', iWon(mt.win) ? AMBER : HUDC, 7, true);
     radio('NIGHTJAR', iWon(mt.win) ? '対戦勝利だ、見事だったぞ！' : mt.win ? `対戦終了。勝者は ${n}。` : '対戦終了。', 5, true); }
@@ -2203,13 +2356,19 @@ function matchTick(dt) {
   if (!mt) return;
   NET.view = mt; NET.lastMt = mt;
   if (mt.s !== NET.mtSeen) { NET.mtSeen = mt.s; NET.curPh = mt.ph; onPhase(mt); }
+  if (mt.mode === 'coop') {
+    if (mt.ph === 'fight' && mt.wave !== NET.seenWave) { NET.seenWave = mt.wave; onWave(mt.wave); }
+    if (mt.ph === 'fight' && !player.alive && mt.pl.includes(NET.me)) { NET.respawnT -= dt; if (NET.respawnT <= 0) { respawnPlayer(); showMsg('BACK IN ACTION', HUDC, 1.5); } }
+    if (amL && mt.ph === 'fight' && puppets.size && !enemies.some(e => e.alive)) adoptPuppets();
+    if (mt.ph === 'wait' || mt.ph === 'count') { if (amL) clearCoopEnemies(); if (puppets.size) clearPuppets(); }
+  }
 }
 const MROOM = { t: 0 };
 function updateMroomUI(force) {
   const now = performance.now(); if (!force && now - MROOM.t < 200) return; MROOM.t = now;
   const mt = NET.view, lead = roster()[0], amL = lead === NET.me, list = roster();
   $('#mrCode').textContent = 'ROOM ' + NET.name.replace(/^sky-/, '').toUpperCase();
-  $('#mrInfo').textContent = `接続: ${NET.via === 'claude' ? 'claude.ai' : NET.via === 'relay' ? 'リレー（' + (NET.broker || '') + '）' : NET.via === 'p2p' ? 'P2P' : 'テスト'}　·　${list.length} / 4 人` + (list.length < 2 ? '　·　相手を待っています。友達には同じルームコードを入れてもらってね' : '');
+  $('#mrInfo').textContent = `接続: ${NET.via === 'claude' ? 'claude.ai' : NET.via === 'relay' ? 'リレー（' + (NET.broker || '') + '）' : NET.via === 'p2p' ? 'P2P' : 'テスト'}　·　${list.length} / 4 人` + (list.length < 2 ? (m0 => m0 === 'coop' ? '　·　1人でも「準備OK」で出撃できる' : '　·　相手を待っています。友達には同じルームコードを入れてもらってね')(roster()[0] === NET.me ? NET.mode : (NET.view ? NET.view.mode : 'ffa')) : '');
   const ul = $('#mrList'); ul.textContent = '';
   for (const id of list) {
     const me = id === NET.me, o = remotes.get(id), li = document.createElement('li');
@@ -2221,24 +2380,26 @@ function updateMroomUI(force) {
   }
   const m = amL ? NET.mode : (mt ? mt.mode : 'ffa');
   document.querySelectorAll('#mrModeRow [data-mode]').forEach(btn => { btn.classList.toggle('on', btn.dataset.mode === m); btn.disabled = !amL; });
-  $('#mrRule').textContent = (m === 'team' ? 'チーム戦：青チームと赤チームに分かれて戦う（味方は撃てない）。' : '個人戦：全員が敵のバトルロイヤル。') + '3ラウンド制で先に2ラウンド取ったら勝ち。撃墜されたらそのラウンドは観戦。' + (amL ? '' : '　ルール選択は★の人ができる。');
+  $('#mrRule').textContent = (m === 'coop' ? '協力：全員で4ウェーブの敵編隊に挑む。3ウェーブ目に超大型爆撃機「LEVIATHAN」が出現。撃墜されても8秒で復帰。制限時間10分。1人でも遊べる。'
+    : (m === 'team' ? 'チーム戦：青チームと赤チームに分かれて戦う（味方は撃てない）。' : '個人戦：全員が敵のバトルロイヤル。') + '3ラウンド制で先に2ラウンド取ったら勝ち。撃墜されたらそのラウンドは観戦。') + (amL ? '' : '　ルール選択は★の人ができる。');
   $('#readyBtn').textContent = NET.rdy ? '準備OK を取り消す' : '準備OK';
   $('#readyBtn').classList.toggle('ghost', !!NET.rdy);
 }
 function netDie(reason, killer) {
   const P = player; P.alive = false; P.mesh.visible = false; explode(P.pos, 1.8); spawnDebris(P.pos, P.vel, 10); gunFiring = false; post.first = true;
-  NET.deaths++; NET.deathSeq++; NET.killedBy = killer || null;
+  NET.deaths++; NET.deathSeq++; NET.killedBy = killer || null; NET.respawnT = 8;
   const k = killer && remotes.get(killer); NET.killerName = k ? k.label : '';
   showMsg(reason === '墜落' ? 'CRASHED' : 'SHOT DOWN', WARN, 2.5, true);
 }
-function receiveHit(o, d) {
-  if (!player.alive || !NET.view || NET.view.ph !== 'fight' || isAlly(o)) return;
-  player.hp -= clamp(d, 0, 60); shake = Math.max(shake, 1.2); fx.red = 1; showMsg('DAMAGED', WARN, 1.2);
+function receiveHit(o, d, ai) {
+  if (!player.alive || !NET.view || NET.view.ph !== 'fight' || (!ai && isAlly(o))) return;
+  player.hp -= clamp(d, 0, 90); shake = Math.max(shake, 1.2); fx.red = 1; showMsg('DAMAGED', WARN, 1.2);
   if (player.hp <= 0) { player.hp = 0; netDie('被撃墜', o.peer); }
 }
 function makeRemote(peer, pr) {
   const col = numv(pr.c) % 4, pc = PBODY[col];
-  const mesh = makeJet({ body: pc[0], dark: 0x3d4247, tail: pc[1] }); scene.add(mesh);
+  const as = Array.isArray(pr.as) ? pr.as : null, pt = as && PARTS.paint[numv(as[1])], fr = as && PARTS.frame[numv(as[0])];
+  const mesh = makeJet(pt ? { body: pt.body, dark: pt.dark, tail: pt.tail } : { body: pc[0], dark: 0x3d4247, tail: pc[1] }); if (fr) mesh.scale.set(fr.sc[0], fr.sc[1], fr.sc[2]); scene.add(mesh);
   const o = { kind: 'air', remote: true, peer, label: 'PILOT', color: col, mesh, pos: new V3(), vel: new V3(), dir: new V3(0, 0, -1), quat: new Q4(), netPos: new V3(), netQuat: new Q4(),
     speed: 0, throttle: .5, cp: 0, cr: 0, cy: 0, alive: false, hp: 100, radius: 15, score: 1000, ace: false, kills: 0, deaths: 0, missiles: new Map(), gun: false, gunT: 0, upd: -1, recvAt: 0, trailT: 0, lastDs: undefined, flSeq: undefined, first: true };
   let mx = 0; if (Array.isArray(pr.h)) for (const h of pr.h) if (Array.isArray(h)) mx = Math.max(mx, numv(h[2])); NET.lastHit[peer] = mx;
@@ -2270,14 +2431,17 @@ function applyRemote(o, pr, updatedAt) {
     else { const kk = pr.kb && remotes.get(pr.kb); showMsg(kk ? `${kk.label} ▶ ${o.label}` : `${o.label} DOWN`, HUDD, 2.2); } }
   // hits addressed to me
   if (Array.isArray(pr.h)) for (const h of pr.h) { if (!Array.isArray(h)) continue; const s2 = numv(h[2]);
-    if (h[0] === NET.me && s2 > (NET.lastHit[o.peer] || 0)) { NET.lastHit[o.peer] = s2; receiveHit(o, numv(h[1])); } }
+    if (h[0] === NET.me && s2 > (NET.lastHit[o.peer] || 0)) { NET.lastHit[o.peer] = s2;
+      if (typeof h[4] === 'number') applyAIHit(h[4], numv(h[1]), o); else receiveHit(o, numv(h[1]), h[3] === 1); } }
+  // leader's co-op enemies and flak
+  o.en = Array.isArray(pr.en) ? pr.en.slice(0, 20) : null; o.fk = Array.isArray(pr.fk) ? pr.fk.slice(0, 8) : null;
   // their flares can spoof my missiles
   if (Array.isArray(pr.fl)) { const fs = numv(pr.fl[0]); if (o.flSeq === undefined) o.flSeq = fs; else if (fs > o.flSeq) { o.flSeq = fs;
     const now = []; for (let i = 0; i < 6; i++) { const d = { pos: new V3(numv(pr.fl[1]), numv(pr.fl[2]), numv(pr.fl[3])), vel: o.vel.clone().multiplyScalar(.55).add(_v1.set(rand(-1, 1), rand(-.6, .4), rand(-1, 1)).multiplyScalar(40)), life: 3.2, alive: true }; decoys.push(d); now.push(d); }
-    for (const m of missiles) if (m.owner === 'player' && m.target === o && m.pos.distanceTo(o.pos) < 4500 && Math.random() < .75) m.target = pick(now); } }
+    for (const m of missiles) if ((m.owner === 'player' || (m.owner === 'enemy' && mode === 'multi')) && m.target === o && m.pos.distanceTo(o.pos) < 4500 && Math.random() < .75) m.target = pick(now); } }
   // their missiles (visual + incoming warning)
   const seen = new Set();
-  if (Array.isArray(pr.m)) for (const e of pr.m.slice(0, 8)) { if (!Array.isArray(e)) continue; const id = numv(e[0]); seen.add(id);
+  if (Array.isArray(pr.m)) for (const e of pr.m.slice(0, 16)) { if (!Array.isArray(e)) continue; const id = numv(e[0]); seen.add(id);
     let rm = o.missiles.get(id);
     if (!rm) { rm = { mesh: makeMissileMesh(), pos: new V3(), net: new V3(), dir: new V3(0, 0, -1), tgt: null, upd: -1, at: 0 }; const ex = new THREE.Sprite(e[7] === NET.me ? exhMatEnemy : exhMat); ex.position.z = 2; ex.scale.setScalar(3.4); rm.mesh.add(ex); scene.add(rm.mesh); o.missiles.set(id, rm); rm.pos.set(numv(e[1]), numv(e[2]), numv(e[3])); }
     rm.net.set(numv(e[1]), numv(e[2]), numv(e[3])); rm.dir.set(numv(e[4]), numv(e[5]), numv(e[6])); if (rm.dir.lengthSq() < .01) rm.dir.set(0, 0, -1); rm.dir.normalize();
@@ -2301,10 +2465,10 @@ function stepRemote(o, dt) {
 }
 function buildPresence() {
   const P = player, r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, r2 = v => Math.round(v * 100) / 100;
-  const m = []; for (const ms of missiles) if (ms.owner === 'player' && m.length < 8) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target && ms.target.remote ? ms.target.peer : null]);
+  const m = []; for (const ms of missiles) if ((ms.owner === 'player' || NET.mt) && ms.nid && m.length < 16) m.push([ms.nid, r1(ms.pos.x), r1(ms.pos.y), r1(ms.pos.z), r3(ms.dir.x), r3(ms.dir.y), r3(ms.dir.z), ms.target === P ? NET.me : ms.target && ms.target.remote ? ms.target.peer : null]);
   return { v: 1, rm: NET.name, n: NET.callsign, c: NET.color, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
-    s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp), al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
-    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-10), fl: NET.flare, rdy: NET.rdy, mt: NET.mt };
+    s: Math.round(P.speed), th: r2(P.throttle), cp: r2(P.cp), cr: r2(P.cr), cy: r2(P.cy), hp: Math.round(P.hp / P.maxHp * 100), mh: P.maxHp, as: [LO.frame, LO.paint], al: P.alive ? 1 : 0, k: NET.kills, dt: NET.deaths, ds: NET.deathSeq, kb: NET.killedBy,
+    g: gunFiring ? 1 : 0, m, h: NET.hits.slice(-12), fl: NET.flare, rdy: NET.rdy, mt: NET.mt, en: NET.mt && NET.mt.mode === 'coop' ? coopEnemyList() : null, fk: NET.mt && NET.mt.mode === 'coop' ? NET.flak : null };
 }
 function netUpdate(dt) {
   const r = NET.room; if (!r) return;
@@ -2317,10 +2481,218 @@ function netUpdate(dt) {
     if (!o) { o = makeRemote(p.peer, pr); remotes.set(p.peer, o); showMsg(`${String(pr.n || 'PILOT').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12)} JOINED`, HUDD, 2); }
     applyRemote(o, pr, p.updatedAt);
   }
-  for (const [peer, o] of remotes) if (!seen.has(peer)) { showMsg(`${o.label} LEFT`, HUDD, 2); removeRemote(o); remotes.delete(peer); }
+  for (const [peer, o] of remotes) if (!seen.has(peer)) { showMsg(`${o.label} LEFT`, HUDD, 2); removeRemote(o); remotes.delete(peer); for (const e of enemies) if (e.tgt === o) e.tgt = null; }
   for (const o of remotes.values()) stepRemote(o, dt);
+  const lead = remotes.get(roster()[0]);
+  if (lead && lead.en) syncPuppets(lead.en, lead.upd); else if (puppets.size && (!lead || !lead.en)) { if (!NET.mt) clearPuppets(); }
+  if (lead && lead.fk) syncFlak(lead.fk);
+  for (const q of puppets.values()) stepPuppet(q, dt);
   NET.sendT -= dt; if (NET.sendT <= 0) { NET.sendT = .05; try { r.presence(buildPresence()).catch(() => {}); } catch (e) {} }
   matchTick(dt);
+}
+
+
+/* ================= hangar (assemble) ================= */
+const CAT_LABEL = { frame: '機体 FRAME', engine: 'エンジン ENGINE', special: '特殊兵装 SP WEAPON', gun: '機銃 GUN', armor: '追加装甲 ARMOR', paint: '塗装 PAINT' };
+function openHangar() { state = 'hangar'; $('#title').hidden = true; $('#hangar').hidden = false; $('#hgWarn').textContent = ''; renderHangar(); }
+function closeHangar() { state = 'title'; $('#hangar').hidden = true; $('#title').hidden = false; updateLoadoutSummary(); }
+function renderHangar() {
+  const box = $('#hgParts'); box.textContent = '';
+  for (const cat of Object.keys(CAT_LABEL)) {
+    const sec = document.createElement('div'); sec.className = 'cat';
+    const h = document.createElement('h3'); h.textContent = CAT_LABEL[cat]; sec.append(h);
+    const row = document.createElement('div'); row.className = 'seg' + (cat === 'paint' ? ' paint' : '');
+    PARTS[cat].forEach((pt, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'segb' + (LO[cat] === i ? ' on' : ''); b.setAttribute('aria-pressed', LO[cat] === i);
+      if (cat === 'paint') { b.title = pt.n; b.setAttribute('aria-label', pt.n); b.style.setProperty('--sw1', '#' + pt.body.toString(16).padStart(6, '0')); b.style.setProperty('--sw2', '#' + pt.tail.toString(16).padStart(6, '0')); }
+      else { b.textContent = pt.n; if (pt.w != null && cat !== 'frame') { const w = document.createElement('small'); w.textContent = pt.w + 'kg'; b.append(w); } }
+      b.addEventListener('click', () => { LO[cat] = i; try { localStorage.setItem('skylance-loadout', JSON.stringify(LO)); } catch (e) {} if (cat === 'frame' || cat === 'paint') rebuildPlayerMesh(); renderHangar(); sfxTone(900, 1100, .05, .04, 'triangle'); });
+      row.append(b);
+    });
+    sec.append(row);
+    const d = document.createElement('p'); d.className = 'pdesc'; const cur = part(cat); d.textContent = cat === 'paint' ? cur.n : cur.d; sec.append(d);
+    box.append(sec);
+  }
+  const st = stats(), w = loadWeight(), cap = part('frame').cap, over = w > cap;
+  const bars = [['耐久', st.hp / 1.8], ['旋回', st.turn / 1.2], ['最高速', st.spd / 1.15], ['加速', st.thr * st.spd * st.spd / 1.3], ['積載', w / cap]];
+  const sb = $('#hgStats'); sb.textContent = '';
+  for (const [n, v] of bars) { const r = document.createElement('div'); r.className = 'stat' + (n === '積載' && over ? ' over' : '');
+    const a = document.createElement('span'); a.textContent = n; const t = document.createElement('i'); const f = document.createElement('b'); f.style.width = Math.round(clamp(v, 0, 1) * 100) + '%'; t.append(f);
+    const val = document.createElement('em'); val.textContent = n === '積載' ? `${w} / ${cap}` : Math.round(v * 100); r.append(a, t, val); sb.append(r); }
+  $('#hgWeight').textContent = over ? 'OVERWEIGHT' : `HP ${Math.round(100 * st.hp)} · SP ${st.sp.n}`;
+  $('#hgWarn').textContent = over ? `積載オーバー（${w - cap}kg 超過）。エンジン・兵装・装甲を軽くしてね。` : '';
+}
+function updateLoadoutSummary() { const el = $('#loSummary'); if (el) el.textContent = `${part('frame').n} / ${part('engine').n} / ${part('special').n} / ${part('gun').n} / ${part('paint').n}`; }
+
+/* ================= co-op: waves, boss, leader-simulated enemies ================= */
+const puppets = new Map();
+NET.flak = []; NET.flakSeq = 0; NET.seenFlak = 0; NET.seenWave = 0;
+function coopScale() { const mt = NET.mt || NET.view; return 1 + .35 * Math.max(0, ((mt && mt.pl.length) || 1) - 1); }
+function coopSpawnPoint() { const a = rand(0, Math.PI * 2), r = rand(9000, 11500); return [Math.sin(a) * r, rand(2400, 3800), Math.cos(a) * r]; }
+function coopFighter(ace) {
+  const [x, y, z] = coopSpawnPoint(); const e = spawnFighter(x, y, z, ace, 2);
+  e.nid = ++NET.mid; e.hp = e.maxHp = Math.round(e.maxHp * coopScale()); e.dir.set(-x, 0, -z).normalize(); return e;
+}
+function makeBossMesh() {
+  const g = new THREE.Group();
+  const hull = new THREE.MeshStandardMaterial({ color: 0x3b4048, metalness: .55, roughness: .42 }), dark = new THREE.MeshStandardMaterial({ color: 0x1f2328, metalness: .5, roughness: .5 });
+  const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.3, .5) }), red = new THREE.MeshBasicMaterial({ color: new THREE.Color(7, .5, .3) });
+  const wing = flatPart([[0, -62], [88, 18], [88, 30], [34, 24], [0, 38], [-34, 24], [-88, 30], [-88, 18]], 5, hull); g.add(wing);
+  let geo = new THREE.CylinderGeometry(8, 12, 96, 18); geo.rotateX(-Math.PI / 2); const body = new THREE.Mesh(geo, dark); body.scale.set(1.3, .75, 1); body.position.set(0, 3, -6); g.add(body);
+  const cock = new THREE.Mesh(new THREE.SphereGeometry(5, 14, 8), new THREE.MeshStandardMaterial({ color: 0x0f1d26, metalness: .9, roughness: .1 })); cock.scale.set(1, .5, 2.2); cock.position.set(0, 8, -38); g.add(cock);
+  for (const sx of [-1, 1]) { const fin = new THREE.Mesh(new THREE.BoxGeometry(2, 18, 20), hull); fin.position.set(sx * 20, 11, 26); fin.rotation.z = -sx * .25; g.add(fin);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(1.4, 6, 4), red); tip.position.set(sx * 88, 2, 24); g.add(tip); }
+  for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), dark); t.position.set((i - 1) * 16, 7, -10 + i * 6); g.add(t); }
+  const pods = [];
+  for (const x of [-56, -30, 30, 56]) { const pg = new THREE.Group(); pg.position.set(x, -6, 8);
+    geo = new THREE.CylinderGeometry(5, 5.5, 24, 14); geo.rotateX(-Math.PI / 2); pg.add(new THREE.Mesh(geo, dark));
+    const d = new THREE.Mesh(new THREE.CircleGeometry(4.2, 14), glow); d.position.z = 12.1; pg.add(d);
+    const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(4, 2, .9), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); fl.position.z = 16; fl.scale.setScalar(16); pg.add(fl);
+    g.add(pg); pods.push(pg); }
+  g.userData.pods = pods; return g;
+}
+const POD_OFF = [[-56, -6, 8], [-30, -6, 8], [30, -6, 8], [56, -6, 8]];
+function spawnBoss() {
+  const sc = coopScale(), mesh = makeBossMesh(); scene.add(mesh);
+  const b = { kind: 'air', boss: true, label: 'LEVIATHAN', mesh, pos: new V3(0, 2600, -9000), vel: new V3(), dir: new V3(1, 0, 0), speed: 150, roll: 0, ang: Math.PI, t: 0,
+    hp: Math.round(1600 * sc), maxHp: Math.round(1600 * sc), alive: true, shield: true, radius: 46, score: 8000, nid: ++NET.mid, missileCd: 3, flakCd: 1, pods: [], ace: false, spin: .25, deadT: 0, phase: 0 };
+  POD_OFF.forEach((o, i) => { const q = { kind: 'air', pod: true, parent: b, label: 'ENGINE', part: mesh.userData.pods[i], off: new V3(o[0], o[1], o[2]), pos: new V3(), vel: new V3(), dir: new V3(),
+    hp: Math.round(320 * sc), maxHp: Math.round(320 * sc), alive: true, radius: 16, score: 1200, nid: ++NET.mid, ace: false }; b.pods.push(q); enemies.push(q); });
+  enemies.push(b); updateBoss(b, 0); return b;
+}
+function updateBoss(b, dt) {
+  b.t += dt; const R = 6500; b.ang += b.speed / R * dt;
+  _v1.set(Math.sin(b.ang) * R, 2600 + Math.sin(b.t * .25) * 180, Math.cos(b.ang) * R);
+  if (dt > 0) b.dir.subVectors(_v1, b.pos).normalize(); b.vel.copy(b.dir).multiplyScalar(b.speed); b.pos.copy(_v1);
+  _v2.copy(b.pos).add(b.dir); _m1.lookAt(b.pos, _v2, UP); b.mesh.quaternion.setFromRotationMatrix(_m1).multiply(_q1.setFromAxisAngle(AX_Z, .12)); b.mesh.position.copy(b.pos);
+  for (const q of b.pods) if (q.alive) { q.pos.copy(q.off).applyQuaternion(b.mesh.quaternion).add(b.pos); q.vel.copy(b.vel); q.dir.copy(b.dir); }
+  b.shield = b.pods.some(q => q.alive);
+  if (!b.shield && Math.random() < .5) { _v3.set(rand(-20, 20), 4, rand(0, 20)).applyQuaternion(b.mesh.quaternion).add(b.pos); smoke.emit(_v3.x, _v3.y, _v3.z, rand(-3, 3), rand(2, 6), rand(-3, 3), 4, 10, 40, .15, .15, .15, .45, .45, .45, .75, .3); }
+  for (const q of b.pods) if (!q.alive) { _v3.copy(q.off).applyQuaternion(b.mesh.quaternion).add(b.pos); if (Math.random() < .6) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 3, 5, 22, .12, .12, .12, .4, .4, .4, .7, .4); }
+  if (dt <= 0) return;
+  const tg = aiTargets().filter(t => t.pos.distanceTo(b.pos) < 7500);
+  b.missileCd -= dt;
+  if (b.missileCd <= 0 && tg.length && enemyMissileCount() < 3 + tg.length) {
+    b.missileCd = b.shield ? 3 : 1.7; const T = pick(tg);
+    _v3.set(rand(-18, 18), 9, rand(-10, 10)).applyQuaternion(b.mesh.quaternion).add(b.pos); _v4.subVectors(T.pos, _v3).normalize(); _v4.y += .4; _v4.normalize();
+    const m = launchMissile(null, _v3, _v4, 160, T, 'enemy', UP, 0, null, 0); m.turn = 1.4;
+  }
+  b.flakCd -= dt;
+  if (b.flakCd <= 0) { b.flakCd = b.shield ? .5 : .3; const near = tg.filter(t => t.pos.distanceTo(b.pos) < 3200);
+    if (near.length) { const T = pick(near); _v3.copy(T.pos).addScaledVector(T.vel, rand(.1, .5)).add(_v4.set(rand(-70, 70), rand(-50, 50), rand(-70, 70)));
+      flakBurst(_v3); NET.flak.push([++NET.flakSeq, Math.round(_v3.x), Math.round(_v3.y), Math.round(_v3.z)]); if (NET.flak.length > 8) NET.flak.shift();
+      for (const t of near) if (t.pos.distanceTo(_v3) < 45) { if (t === player) damagePlayer(mode === 'multi' ? 10 : 6); else if (t.remote) { NET.hits.push([t.peer, 10, ++NET.hitSeq, 1]); if (NET.hits.length > 12) NET.hits.shift(); } } } }
+}
+function flakBurst(p) {
+  for (let i = 0; i < 10; i++) { _v1.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(10, 40)); fire.emit(p.x, p.y, p.z, _v1.x, _v1.y, _v1.z, .3, 5, 14, 1, .8, .4, .7, .2, .05, 1, 2); }
+  for (let i = 0; i < 6; i++) smoke.emit(p.x, p.y, p.z, rand(-6, 6), rand(-6, 6), rand(-6, 6), 2.5, 10, 28, .12, .12, .12, .3, .3, .3, .8, 1);
+  const d = p.distanceTo(camera.position); if (d < 1500) { shake = Math.max(shake, (1 - d / 1500) * .5); sfxNoise(.4, 700, (1 - d / 1500) * .3, 'lowpass', 120); }
+}
+function syncFlak(list) { for (const f of list) { if (!Array.isArray(f)) continue; const sq = numv(f[0]); if (sq > NET.seenFlak) { NET.seenFlak = sq; flakBurst(_v6.set(numv(f[1]), numv(f[2]), numv(f[3]))); } } }
+function coopLeaderStep(mt, dt, go) {
+  if (mt.ph === 'count') { mt.rl -= dt; if (mt.rl <= 0) { go('fight', 600); NET.waveGap = 2; } return; }
+  if (mt.ph === 'fight') {
+    mt.rl -= dt;
+    if (!enemies.some(e => e.alive)) { NET.waveGap = (NET.waveGap == null ? 3 : NET.waveGap) - dt;
+      if (NET.waveGap <= 0) { NET.waveGap = 4; if (mt.wave >= 4) { mt.res = 'win'; go('end', 10); } else coopNextWave(mt); } }
+    if (mt.rl <= 0 && mt.ph === 'fight') { mt.res = 'lose'; go('end', 10); }
+    return;
+  }
+  if (mt.ph === 'end') { mt.rl -= dt; if (mt.rl <= 0) { clearCoopEnemies(); mt.pl = []; go('wait', 0); } }
+}
+function coopNextWave(mt) {
+  mt.wave++;
+  if (mt.wave === 1) for (let i = 0; i < 4; i++) coopFighter(false);
+  else if (mt.wave === 2) { for (let i = 0; i < 5; i++) coopFighter(false); coopFighter(true); }
+  else if (mt.wave === 3) { spawnBoss(); coopFighter(false); coopFighter(false); }
+  else { for (let i = 0; i < 6; i++) coopFighter(false); coopFighter(true); }
+}
+function onWave(w) {
+  if (!w) return;
+  if (w === 3) { showMsg('WARNING', WARN, 3, true); after(1.2, () => showMsg('LEVIATHAN APPROACHING', AMBER, 3, true)); sfxTone(300, 200, 1.2, .2, 'sawtooth');
+    radio('NIGHTJAR', '超大型爆撃機「LEVIATHAN」接近！エンジン4基がシールドを張っている。まずエンジンを潰せ！', 5.5, true); }
+  else { showMsg(`WAVE ${w}`, HUDC, 2.5, true); radio('NIGHTJAR', ['', '第1波、敵戦闘機4機。各機、交戦開始。', '第2波接近、エース機を含む。気をつけろ。', '', '最終波だ！全機、残りの力を出し切れ！'][w], 4, true); }
+}
+function clearCoopEnemies() { for (const e of enemies) if (e.mesh) scene.remove(e.mesh); enemies.length = 0; for (const m of [...missiles]) if (m.owner === 'enemy') { scene.remove(m.mesh); missiles.splice(missiles.indexOf(m), 1); } }
+const TYPE_CODE = e => e.boss ? 'B' : e.pod ? 'E' : e.ace ? 'A' : 'F';
+function coopEnemyList() {
+  const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000, out = [];
+  for (const e of enemies) { if (!e.alive || !e.nid) continue;
+    const mask = e.boss ? e.pods.reduce((m, q, i) => m | (q.alive ? 1 << i : 0), 0) : 0;
+    out.push([e.nid, TYPE_CODE(e), r1(e.pos.x), r1(e.pos.y), r1(e.pos.z), r3(e.dir.x), r3(e.dir.y), r3(e.dir.z), Math.round((e.roll || 0) * 100) / 100, Math.round(e.hp / e.maxHp * 100), mask]);
+    if (out.length >= 18) break; }
+  return out;
+}
+function applyAIHit(nid, d, from) {
+  const e = enemies.find(x => x.nid === nid && x.alive); if (!e || e.shield) return;
+  e.hp -= clamp(d, 0, 150); if (e.hp <= 0) destroy(e, true);
+}
+function makePuppet(id, code) {
+  const q = { kind: 'air', puppet: true, id, code, label: code === 'B' ? 'LEVIATHAN' : code === 'E' ? 'ENGINE' : code === 'A' ? 'ACE' : 'FTR', ace: code === 'A', boss: false,
+    pos: new V3(), net: new V3(), dir: new V3(0, 0, -1), ndir: new V3(0, 0, -1), vel: new V3(), roll: 0, hpPct: 100, mask: 15, alive: true, at: 0, upd: -1,
+    radius: code === 'B' ? 46 : code === 'E' ? 16 : 15, speed: code === 'B' ? 150 : code === 'E' ? 150 : 260, mesh: null, trailT: 0, myHitT: 0, shield: false };
+  if (code === 'B') q.mesh = makeBossMesh(); else if (code !== 'E') q.mesh = code === 'A' ? makeJet({ body: 0x1d1e22, dark: 0x111214, tail: 0xd9b229 }) : makeJet({ body: 0x646a5c, dark: 0x3c4038, tail: 0x8e2a22 });
+  if (q.mesh) scene.add(q.mesh); return q;
+}
+function syncPuppets(list, upd) {
+  const seen = new Set();
+  for (const e of list) { if (!Array.isArray(e) || e.length < 11) continue; const id = numv(e[0]), code = ['F', 'A', 'B', 'E'].includes(e[1]) ? e[1] : 'F'; seen.add(id);
+    let q = puppets.get(id); if (!q) { q = makePuppet(id, code); puppets.set(id, q); q.pos.set(numv(e[2]), numv(e[3]), numv(e[4])); }
+    if (q.upd !== upd) { q.upd = upd; q.at = performance.now(); }
+    q.net.set(numv(e[2]), numv(e[3]), numv(e[4])); q.ndir.set(numv(e[5]), numv(e[6]), numv(e[7])); if (q.ndir.lengthSq() < .01) q.ndir.set(0, 0, -1); q.ndir.normalize();
+    q.roll = clamp(numv(e[8]), -2, 2); q.hpPct = clamp(numv(e[9]), 0, 100); q.mask = numv(e[10]);
+    if (code === 'B') { q.shield = (q.mask & 15) !== 0; q.mesh.userData.pods.forEach((pg, i) => { pg.visible = !!(q.mask & (1 << i)); }); } }
+  for (const [id, q] of puppets) if (!seen.has(id)) { removePuppet(q, true); puppets.delete(id); }
+}
+function stepPuppet(q, dt) {
+  const a = Math.min(.5, (performance.now() - q.at) / 1000); _v1.copy(q.net).addScaledVector(q.ndir, q.speed * a);
+  if (q.pos.distanceTo(_v1) > 500) q.pos.copy(_v1); else q.pos.lerp(_v1, 1 - Math.exp(-dt * 8));
+  q.dir.lerp(q.ndir, 1 - Math.exp(-dt * 8)).normalize(); q.vel.copy(q.dir).multiplyScalar(q.speed);
+  if (!q.mesh) return;
+  _v2.copy(q.pos).add(q.dir); _m1.lookAt(q.pos, _v2, UP); q.mesh.quaternion.setFromRotationMatrix(_m1).multiply(_q1.setFromAxisAngle(AX_Z, q.code === 'B' ? .12 : q.roll)); q.mesh.position.copy(q.pos);
+  if (q.code !== 'B') { animateJet(q.mesh, .3, 0, 0, 0, 0, .7, dt, missionTime + q.id);
+    q.trailT -= dt; if (q.trailT <= 0) { q.trailT = .05; _v3.copy(q.pos).addScaledVector(q.dir, -9); smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 2.2, 1.5, 5, .96, .97, .98, .9, .9, .92, .38, 0);
+      if (q.hpPct < 60) smoke.emit(_v3.x, _v3.y, _v3.z, rand(-2, 2), rand(0, 3), rand(-2, 2), 2.5, 3, 16, .2, .2, .2, .45, .45, .45, .65, .5); } }
+}
+function removePuppet(q, boom) {
+  if (boom && NET.view && NET.view.ph === 'fight') { explode(q.pos, q.code === 'B' ? 3 : 1.2); spawnDebris(q.pos, q.vel, q.code === 'B' ? 24 : 8);
+    if (performance.now() - q.myHitT < 2500) { showMsg('DESTROYED', HUDC, 1.9, true); popups.push({ pos: q.pos.clone(), text: 'KILL', sub: q.label, t: 1.8 }); kills++; } }
+  if (q.mesh) scene.remove(q.mesh); q.alive = false; if (curTarget === q) { curTarget = null; lockT = 0; }
+}
+function clearPuppets() { for (const q of puppets.values()) removePuppet(q, false); puppets.clear(); }
+// the old leader left mid-fight: take over its enemies so the mission continues
+function adoptPuppets() {
+  let boss = null; const pods = [];
+  for (const q of puppets.values()) {
+    if (q.code === 'F' || q.code === 'A') { const e = spawnFighter(q.pos.x, q.pos.y, q.pos.z, q.code === 'A', 2); e.nid = ++NET.mid; e.dir.copy(q.dir); e.maxHp = Math.round(e.maxHp * coopScale()); e.hp = Math.max(1, e.maxHp * q.hpPct / 100); }
+    else if (q.code === 'B') boss = q; else pods.push(q);
+  }
+  if (boss) { const b = spawnBoss(); b.pos.copy(boss.pos); b.ang = Math.atan2(boss.pos.x, boss.pos.z); b.hp = Math.max(1, b.maxHp * boss.hpPct / 100);
+    b.pods.forEach((q, i) => { if (!(boss.mask & (1 << i))) { q.alive = false; q.removed = true; q.part.visible = false; } }); }
+  clearPuppets();
+}
+function drawCoopHud(c, s, mt, pad, blink, font, cx, cy, P) {
+  c.fillText(`CO-OP · WAVE ${mt.wave || 0}/4 · ROOM ` + NET.name.replace(/^sky-/, '').toUpperCase(), pad, pad); font(12, JP);
+  c.fillText(mt.wave === 3 ? '巨大爆撃機 LEVIATHAN を撃墜せよ' : '敵編隊を全機撃墜せよ（全4ウェーブ）', pad, pad + 18 * s);
+  if (mt.ph === 'fight') { font(22); c.fillStyle = mt.rl < 60 && blink ? WARN : HUDC; c.fillText(fmtTime(Math.max(0, mt.rl)), pad, pad + 38 * s); c.fillStyle = HUDC; }
+  font(13); c.fillText('TEAM SCORE ' + String(mt.sc || 0).padStart(6, '0'), pad, pad + 64 * s);
+  // team list (top-right)
+  const ids = mt.pl.length ? mt.pl : roster(), sx0 = W - pad, sy0 = pad + (isTouch ? 60 * s : 0); font(12); c.textAlign = 'right'; c.fillText('WINGMEN', sx0, sy0);
+  ids.forEach((id, i) => { const me = id === NET.me, o = remotes.get(id); if (!me && !o) return; const alive = me ? P.alive : o.alive, hp = me ? P.hp / P.maxHp * 100 : o.hp;
+    c.fillStyle = PCOL[(me ? NET.color : o.color) % 4]; c.globalAlpha = alive ? 1 : .45;
+    c.fillText((me ? '▶ ' : '') + (me ? NET.callsign : o.label).padEnd(13, ' ') + (alive ? String(Math.round(hp)).padStart(4, ' ') + '%' : '  ---'), sx0, sy0 + (i + 1) * 17 * s); });
+  c.globalAlpha = 1; c.fillStyle = HUDC; c.textAlign = 'left';
+  // boss bar
+  let boss = enemies.find(e => e.boss && e.alive), pct = 0, shield = false, podsAlive = 0;
+  if (boss) { pct = boss.hp / boss.maxHp * 100; shield = boss.shield; podsAlive = boss.pods.filter(q => q.alive).length; }
+  else { const q = [...puppets.values()].find(x => x.code === 'B' && x.alive); if (q) { boss = q; pct = q.hpPct; shield = q.shield; podsAlive = [0, 1, 2, 3].filter(i => q.mask & (1 << i)).length; } }
+  if (boss) { const bw = Math.min(420 * s, W - 2 * pad), bx = cx - bw / 2, by = 46 * s + 8 + 78 * s;
+    font(12); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillStyle = AMBER; c.fillText('LEVIATHAN' + (shield ? `  ·  SHIELD (ENGINE ×${podsAlive})` : '  ·  SHIELD DOWN'), cx, by - 3);
+    c.strokeStyle = AMBER; c.strokeRect(bx, by, bw, 8 * s); c.fillStyle = shield ? 'rgba(127,214,255,.85)' : AMBER; c.fillRect(bx + 2, by + 2, (bw - 4) * clamp(pct / 100, 0, 1), 8 * s - 4);
+    c.textAlign = 'left'; c.textBaseline = 'top'; c.fillStyle = HUDC; c.strokeStyle = HUDC; }
+  if (mt.ph === 'count') { font(72); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = AMBER; c.fillText(String(Math.max(1, Math.ceil(mt.rl))), cx, cy - 60 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
+  if (!P.alive && mt.ph === 'fight') { font(22); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = WARN; c.fillText('SHOT DOWN', cx, 140 * s);
+    font(14, JP); c.fillStyle = '#eaf3ee'; c.fillText('復帰まで ' + Math.max(0, Math.ceil(NET.respawnT)) + ' 秒', cx, 166 * s); c.textAlign = 'left'; c.fillStyle = HUDC; }
 }
 
 /* ================= main loop ================= */
@@ -2380,7 +2752,7 @@ function showResult() {
   setGuide(false, true);
   state = 'result'; $('#touch').hidden = true; timeScale = 1; slowmoT = 0;
   const win = missionResult === 'win';
-  const tb = win ? Math.round(timeLeft) * 10 : 0, dmgPen = Math.round(100 - player.hp) * 20, total = Math.max(0, score + tb - (win ? dmgPen : 0));
+  const tb = win ? Math.round(timeLeft) * 10 : 0, dmgPen = Math.round((1 - player.hp / player.maxHp) * 100) * 20, total = Math.max(0, score + tb - (win ? dmgPen : 0));
   $('#verdict').textContent = win ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED';
   $('#verdict').className = 'verdict' + (win ? '' : ' fail');
   const rows = [['撃破数', kills], ['撃破スコア', score], ['残り時間ボーナス', win ? '+' + tb : '—'], ['被弾ペナルティ', win ? '−' + dmgPen : '—'], ['最大G', player.maxG.toFixed(1) + ' G'], ['経過時間', fmtTime(missionTime)], ['TOTAL', total]];
@@ -2398,14 +2770,17 @@ function toTitle() {
   if (SND.ctx) { SND.ctx.resume(); ['engG', 'roarG', 'windG', 'lockG', 'alertG', 'warnG', 'gunG'].forEach(k => SND[k].gain.value = 0); }
 }
 function readOpts() { invert = $('#optInvert').checked; blurOn = $('#optBlur').checked; opts.beginner = $('#optBeginner').checked; opts.lockMode = $('#optLock').value; opts.guide = $('#optGuide').checked; applyQuality($('#optQuality').value); }
-$('#startBtn').addEventListener('click', () => { readOpts(); startMission(); });
-$('#tutBtn').addEventListener('click', () => { readOpts(); startTutorial(); });
-$('#multiBtn').addEventListener('click', () => { readOpts(); openLobby(); });
+const sortieOk = () => { if (!overweight()) return true; openHangar(); $('#hgWarn').textContent = '積載オーバーのままでは出撃できないよ。パーツを軽くしてね。'; return false; };
+$('#startBtn').addEventListener('click', () => { readOpts(); if (sortieOk()) startMission(); });
+$('#hangarBtn').addEventListener('click', () => openHangar());
+$('#hgDone').addEventListener('click', () => { if (overweight()) { $('#hgWarn').textContent = '積載オーバー！パーツを軽くしてね。'; return; } closeHangar(); });
+$('#tutBtn').addEventListener('click', () => { readOpts(); if (sortieOk()) startTutorial(); });
+$('#multiBtn').addEventListener('click', () => { readOpts(); if (sortieOk()) openLobby(); });
 $('#quickBtn').addEventListener('click', () => joinMatch(''));
 $('#codeBtn').addEventListener('click', () => { const code = $('#roomCode').value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10); if (!code) { lobbyStatus('ルームコードは英数字で入力してね'); return; } joinMatch(code); });
 $('#lobbyBack').addEventListener('click', () => { netLeave(); $('#lobby').hidden = true; $('#title').hidden = false; });
 $('#tutEnd').addEventListener('click', toTitle);
-$('#tutSortie').addEventListener('click', () => startMission());
+$('#tutSortie').addEventListener('click', () => { if (sortieOk()) startMission(); });
 $('#guideBtn').addEventListener('click', () => setGuide(!opts.guide));
 $('#readyBtn').addEventListener('click', () => { NET.rdy = NET.rdy ? 0 : 1; updateMroomUI(true); sfxTone(700, 1050, .1, .06, 'triangle'); });
 document.querySelectorAll('#mrModeRow [data-mode]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.mode = b.dataset.mode; updateMroomUI(true); }));
@@ -2436,6 +2811,9 @@ setupWorld();
 setupPost();
 player.pos.set(0, 3000, 14500);
 resize();
+updateLoadoutSummary();
+// test hook, local dev server only
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { NET, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: () => spawnBoss(), damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
 requestAnimationFrame(frame);
 })();
 </script>
