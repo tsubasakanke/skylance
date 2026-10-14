@@ -752,7 +752,7 @@ function setupPost() {
   try {
     const opt = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
     post.rtA = new THREE.WebGLRenderTarget(4, 4, Object.assign({ depthTexture: new THREE.DepthTexture(4, 4, THREE.UnsignedIntType) }, opt));
-    post.rtB = new THREE.WebGLRenderTarget(4, 4, Object.assign({ depthBuffer: false }, opt));
+    post.rtB = new THREE.WebGLRenderTarget(4, 4, Object.assign({ depthBuffer: true }, opt));
     post.bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), .85, .55, 1.0);
     post.blur = new THREE.ShaderMaterial({
       uniforms: { tColor: { value: null }, tDepth: { value: null }, reproj: { value: new THREE.Matrix4() }, strength: { value: .6 }, radial: { value: 0 }, near: { value: camera.near }, far: { value: camera.far } },
@@ -826,7 +826,7 @@ function resizePost() {
 }
 const sunSP = { x: 0, y: 0, behind: true };
 function renderFrame(dt) {
-  if (!post.on) { renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+  if (!post.on) { renderer.setRenderTarget(null); renderer.render(scene, camera); renderCockpit(); return; }
   renderer.setRenderTarget(post.rtA); renderer.render(scene, camera);
   // velocity buffer ignores camera shake so shake frames don't smear
   camera.position.sub(shakeOff); camera.updateMatrixWorld();
@@ -840,6 +840,7 @@ function renderFrame(dt) {
     U.strength.value = .5 * clamp((1 / 60) / Math.max(dt, 1e-3), .15, 1.2); U.radial.value = fx.radial;
     quad.material = post.blur; renderer.setRenderTarget(post.rtB); renderer.render(quadScene, quadCam); src = post.rtB;
   }
+  renderer.setRenderTarget(src); renderCockpit();
   post.bloom.render(renderer, null, src, dt, false);
   const F = post.final.uniforms;
   F.tColor.value = src.texture; F.tDepth.value = post.rtA.depthTexture; F.aspect.value = W / H;
@@ -991,10 +992,10 @@ const LOCK_TIME = 0.45, PYLON_RELOAD = 3.4;
 const PARTS = {
   frame: [
     { id: 'striker', n: 'STRIKER', d: 'バランスのとれた主力機。迷ったらこれ', hp: 1, turn: 1, spd: 1, cap: 100, sc: [1, 1, 1], shape: 'std' },
-    { id: 'interceptor', n: 'INTERCEPTOR', d: 'カナード付きデルタ翼の高速機。装甲は薄い', hp: .75, turn: 1.14, spd: 1.1, cap: 80, sc: [.95, .95, 1.04], shape: 'delta' },
-    { id: 'fortress', n: 'FORTRESS', d: '重装甲の大型機。旋回は重いがとにかく硬い', hp: 1.45, turn: .84, spd: .93, cap: 140, sc: [1.16, 1.12, 1.1], shape: 'heavy' },
-    { id: 'spectre', n: 'SPECTRE', d: '全翼ステルス機。敵ミサイルの追尾が鈍る。積載にも余裕', hp: .9, turn: .9, spd: 1, cap: 115, sc: [1, 1, 1], shape: 'wing', stealth: true },
-    { id: 'raptor', n: 'RAPTOR', d: '前進翼の格闘戦機。旋回性能がずば抜けて高い', hp: .85, turn: 1.25, spd: 1.03, cap: 90, sc: [1, 1, 1], shape: 'fsw' }],
+    { id: 'interceptor', n: 'INTERCEPTOR', d: 'カナード付きデルタ翼の高速機。装甲は薄い', hp: .75, turn: 1.14, spd: 1.22, cap: 80, sc: [.95, .95, 1.04], shape: 'delta' },
+    { id: 'fortress', n: 'FORTRESS', d: '重装甲の大型機。旋回は重いがとにかく硬い', hp: 1.45, turn: .84, spd: .82, cap: 140, sc: [1.16, 1.12, 1.1], shape: 'heavy' },
+    { id: 'spectre', n: 'SPECTRE', d: '全翼ステルス機。敵ミサイルの追尾が鈍る。積載にも余裕', hp: .9, turn: .9, spd: .96, cap: 115, sc: [1, 1, 1], shape: 'wing', stealth: true },
+    { id: 'raptor', n: 'RAPTOR', d: '前進翼の格闘戦機。旋回性能がずば抜けて高い', hp: .85, turn: 1.25, spd: 1.12, cap: 90, sc: [1, 1, 1], shape: 'fsw' }],
   engine: [
     { id: 'std', n: 'F110 標準', d: 'クセのない標準エンジン', thr: 1, w: 30 },
     { id: 'turbo', n: 'TURBOFAN-X', d: '加速もアフターバーナーも強力。ただし重い', thr: 1.14, w: 45 },
@@ -1032,7 +1033,8 @@ function loadWeight() { return part('engine').w + part('special').w + part('gun'
 const overweight = () => loadWeight() > part('frame').cap;
 function stats() {
   const f = part('frame'), a = part('armor'), e = part('engine'), g = part('gun');
-  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd, thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, gunSpd: g.spd || 1300, sp: part('special'), stealth: !!f.stealth };
+  const load = loadWeight() / f.cap; // a heavily loaded jet is slower
+  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd * (1.06 - .12 * load) * (a.id === 'a2' ? .96 : 1), thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, gunSpd: g.spd || 1300, sp: part('special'), stealth: !!f.stealth };
 }
 let ST = stats();
 // base HP per mode: versus lasts much longer than the solo campaign
@@ -1500,7 +1502,7 @@ function checkCollisions() {
 const trimHits = () => { if (NET.hits.length > 12) NET.hits.shift(); };
 // local AI: small fry are destroyed outright; bosses only take a chunk (a quarter in RAM ATTACK)
 function ramDamage(t, hard) {
-  if (t.isBoss || t.boss || t.pod) { const core = t.pod ? t.parent : t; core.hp -= core.maxHp * (hard ? .25 : .08); if (core.hp <= 0 && core.alive) destroy(core, true); else showMsg('BOSS DAMAGED', AMBER, 1.5); }
+  if (t.isBoss || t.boss || t.pod) { const core = t.pod ? t.parent : t; core.hp -= core.maxHp * (hard ? .4 : .12); if (core.hp <= 0 && core.alive) destroy(core, true); else showMsg('BOSS DAMAGED', AMBER, 1.5); }
   else destroy(t, true);
 }
 function ramInto(t) {
@@ -1509,7 +1511,8 @@ function ramInto(t) {
   if (t.remote) { NET.hits.push([t.peer, 999, ++NET.hitSeq, 3]); trimHits(); }
   else if (t.puppet) { const L = roster()[0]; NET.hits.push([L, hard ? 2 : 1, ++NET.hitSeq, 2, t.id]); trimHits(); t.myHitT = performance.now(); }
   else ramDamage(t, hard);
-  if (hard) { shockwave(P.pos, 260, .8, new THREE.Color(2.4, 1.4, .6)); for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 320) damage(e, 250, true, 60); }
+  if (hard) { shockwave(P.pos, 340, .9, new THREE.Color(2.6, 1.5, .6)); for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 450) damage(e, e.isBoss || e.boss || e.pod ? 260 : 450, true, 90); }
+  else for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 180) damage(e, 120, true, 30);
   showMsg(big ? 'RAMMED' : 'RAM KILL', AMBER, 2.2, true);
   killPlayer('体当たり', t.remote ? t.peer : null);
 }
@@ -1806,6 +1809,7 @@ const camOffset = new V3(0, 7, 32), camUp = new V3(0, 1, 0); let lookingAtTarget
 function updateCamera(dt, inp) {
   const P = player;
   const wasLook = lookingAtTarget; lookingAtTarget = !!(inp && inp.look && curTarget && P.alive); if (wasLook !== lookingAtTarget) post.first = true;
+  CK.active = state === 'play' && camView === 1 && P.alive && !lookingAtTarget;
   if (state === 'title' || state === 'mlobby' || state === 'hangar') {
     const t = performance.now() / 1000;
     P.mesh.position.copy(P.pos); P.mesh.quaternion.copy(P.quat); P.mesh.visible = true;
@@ -1827,8 +1831,7 @@ function updateCamera(dt, inp) {
     camera.position.copy(P.pos).add(camOffset); camUp.lerp(UP, 1 - Math.exp(-dt * 5)).normalize(); camera.up.copy(camUp);
     camera.lookAt(curTarget.pos);
   } else if (camView === 1) {
-    camera.position.copy(_v1.set(0, .95, -5.2).applyQuaternion(P.quat).add(P.pos));
-    camera.quaternion.copy(P.quat); camUp.copy(P.up); camOffset.set(0, 7, 32).applyQuaternion(P.quat);
+    updateCockpit(dt); camUp.copy(P.up); camOffset.set(0, 7, 32).applyQuaternion(P.quat);
   } else {
     const ab = smooth(.75, 1, P.throttle);
     _v1.set(P.cr * -2.8, 6.3 + P.cp * -2.2 - (P.highG ? 2.5 : 0), 29 + ab * 6 - (P.throttle < .3 ? 3 : 0) - (P.highG ? 6 : 0)).applyQuaternion(P.quat);
@@ -1837,7 +1840,7 @@ function updateCamera(dt, inp) {
     camUp.lerp(P.up, 1 - Math.exp(-dt * 6)).normalize(); camera.up.copy(camUp);
     camera.lookAt(_v2.copy(P.pos).addScaledVector(P.velDir, 70).addScaledVector(P.fwd, 20).addScaledVector(P.up, 3));
   }
-  if (state !== 'title') camFov = 60 + clamp((P.speed - 180) / 260, 0, 1) * 9 + smooth(.75, 1, P.throttle) * 5;
+  if (state !== 'title') camFov = CK.active ? 74 + smooth(.75, 1, P.throttle) * 3 : 60 + clamp((P.speed - 180) / 260, 0, 1) * 9 + smooth(.75, 1, P.throttle) * 5;
   if (Math.abs(camera.fov - camFov) > .01) { camera.fov += (camFov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
   const cg = floorAt(camera.position.x, camera.position.z) + 3; if (camera.position.y < cg) camera.position.y = cg;
   shakeOff.set(0, 0, 0);
@@ -1851,6 +1854,151 @@ function updateCamera(dt, inp) {
   fx.vignette = .3 + ab * .12 + (P.g > 6 ? (P.g - 6) * .07 : 0) + (P.highG ? .12 : 0);
   fx.red = Math.max(fx.red - dt * 1.4, alertLevel > 0 && P.alive ? (Math.sin(performance.now() / (alertLevel > .6 ? 70 : 140)) * .5 + .5) * (.18 + .45 * alertLevel) : 0);
   fx.flash = Math.max(0, fx.flash - dt * 1.6);
+}
+
+/* ================= 3D cockpit (first-person view) =================
+   Built in the aircraft's own frame with the pilot's eye at the origin (looking -Z). It is drawn with its own
+   short-range camera after the world pass, so near-plane clipping of the big world camera never cuts it. */
+const CK = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(60, 1, .02, 12), built: false, head: new V3(), look: new THREE.Euler(0, 0, 0, 'YXZ'),
+  mfdT: 0, breathT: 2.5, rect: null, active: false };
+function buildCockpit() {
+  const S = CK.scene; S.environment = scene.environment;
+  S.add(new THREE.AmbientLight(0x8492a6, .32)); S.add(new THREE.HemisphereLight(0xc8dcff, 0x2c2a24, .55));
+  CK.sun = new THREE.DirectionalLight(0xfff0d8, 1.3); S.add(CK.sun); S.add(CK.sun.target);
+  const instr = new THREE.PointLight(0xffb070, .25, 1.2); instr.position.set(0, -.25, -.5); S.add(instr); // instrument flood light
+  const mat = (c, r = .8, m = .15) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+  const panelM = mat(0x2b2f35, .82), darkM = mat(0x131518, .95, 0), coamM = mat(0x0d0e10, 1, 0), metalM = mat(0x6a6e73, .35, .75), suitM = mat(0x4b5139, .92, 0),
+    gloveM = mat(0x2a241d, .8, 0), yellowM = mat(0xc9a227, .6, .1), mirrorM = mat(0xb8c4cc, .04, 1);
+  const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0, parent = S) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); parent.add(o); return o; };
+  // coaming / glareshield and the HUD unit
+  add(new THREE.BoxGeometry(1.05, .06, .34), coamM, 0, -.2, -.82, .1);
+  add(new THREE.CylinderGeometry(.03, .03, 1.02, 10), coamM, 0, -.17, -.66, 0, 0, Math.PI / 2);
+  add(new THREE.BoxGeometry(.22, .09, .24), coamM, 0, -.25, -.69);
+  // HUD combiner: two glass plates in a thin frame, tilted toward the pilot
+  const cg = new THREE.Group(); cg.position.set(0, -.07, -.6); cg.rotation.x = -.22; S.add(cg);
+  const glassM = new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 1, .7), transparent: true, opacity: .06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  add(new THREE.PlaneGeometry(.21, .16), glassM, 0, 0, 0, 0, 0, 0, cg); add(new THREE.PlaneGeometry(.21, .16), glassM, 0, 0, -.02, 0, 0, 0, cg);
+  for (const sx of [-1, 1]) add(new THREE.BoxGeometry(.008, .17, .02), metalM, sx * .108, 0, -.01, 0, 0, 0, cg);
+  add(new THREE.BoxGeometry(.22, .008, .02), metalM, 0, .083, -.01, 0, 0, 0, cg);
+  CK.comb = [new V3(-.105, -.15, -.58), new V3(.105, .01, -.618)];
+  // main instrument panel, tilted toward the eye, with three colour MFDs
+  const pg = new THREE.Group(); pg.position.set(0, -.44, -.8); pg.rotation.x = -.32; S.add(pg);
+  add(new THREE.BoxGeometry(1.02, .36, .04), panelM, 0, 0, 0, 0, 0, 0, pg);
+  CK.mfd = [];
+  [-.3, 0, .3].forEach(x => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const tex = new THREE.CanvasTexture(cv);
+    add(new THREE.BoxGeometry(.205, .205, .02), darkM, x, -.02, .028, 0, 0, 0, pg);
+    const scr = add(new THREE.PlaneGeometry(.16, .16), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.25, 1.25, 1.25) }), x, -.02, .039, 0, 0, 0, pg);
+    for (let k = 0; k < 5; k++) for (const yy of [.088, -.128]) add(new THREE.BoxGeometry(.02, .012, .012), metalM, x - .064 + k * .032, yy, .042, 0, 0, 0, pg);
+    for (let k = 0; k < 4; k++) for (const xx of [-.093, .093]) add(new THREE.BoxGeometry(.012, .02, .012), metalM, x + xx, .05 - k * .044, .042, 0, 0, 0, pg);
+    CK.mfd.push({ cv, ctx: cv.getContext('2d'), tex, scr });
+  });
+  // master caution / warning light strip
+  CK.lights = ['MSL', 'LOCK', 'A/B', 'DMG', 'STALL', 'G'].map((n, i) => {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 24; const x2 = cv.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, 64, 24); x2.fillStyle = '#000'; x2.font = 'bold 15px ' + MONO; x2.textAlign = 'center'; x2.textBaseline = 'middle'; x2.fillText(n, 32, 13);
+    const m = add(new THREE.PlaneGeometry(.052, .02), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0x222222 }), -.16 + i * .064, .142, .022, 0, 0, 0, pg); return m;
+  });
+  // analogue standby gauges (airspeed, altitude) with live needles
+  CK.needles = [];
+  [[-.46, .06], [-.46, -.08]].forEach(([x, y]) => {
+    add(new THREE.CylinderGeometry(.045, .045, .012, 24), darkM, x, y, .026, Math.PI / 2, 0, 0, pg);
+    const face = add(new THREE.CircleGeometry(.04, 24), new THREE.MeshBasicMaterial({ color: 0x0b0d0e }), x, y, .033, 0, 0, 0, pg);
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; add(new THREE.BoxGeometry(.002, .008, .001), new THREE.MeshBasicMaterial({ color: 0xdddddd }), x + Math.sin(a) * .034, y + Math.cos(a) * .034, .034, 0, 0, -a, pg); }
+    const nd = new THREE.Group(); nd.position.set(x, y, .036); pg.add(nd); add(new THREE.BoxGeometry(.003, .034, .002), new THREE.MeshBasicMaterial({ color: new THREE.Color(2, 2, 2) }), 0, .015, 0, 0, 0, 0, nd); CK.needles.push(nd);
+  });
+  // side consoles, knobs and canopy sills
+  for (const sx of [-1, 1]) {
+    add(new THREE.BoxGeometry(.24, .08, .75), panelM, sx * .43, -.56, -.28, 0, 0, sx * -.12);
+    for (let k = 0; k < 6; k++) add(new THREE.CylinderGeometry(.012, .012, .018, 10), metalM, sx * (.38 + (k % 2) * .07), -.51, -.5 + Math.floor(k / 2) * .1);
+    add(new THREE.BoxGeometry(.07, .12, 1.5), darkM, sx * .57, -.3, -.2);
+    add(new THREE.BoxGeometry(.02, .02, .4), yellowM, sx * .53, -.24, -.1); // canopy rail handles
+  }
+  // throttle on the left console, stick between the knees
+  CK.throttle = new THREE.Group(); CK.throttle.position.set(-.37, -.5, -.3); S.add(CK.throttle);
+  add(new THREE.BoxGeometry(.05, .12, .05), metalM, 0, .06, 0, 0, 0, 0, CK.throttle); add(new THREE.BoxGeometry(.07, .05, .1), darkM, 0, .13, 0, 0, 0, 0, CK.throttle);
+  add(new THREE.SphereGeometry(.05, 12, 8), gloveM, .005, .16, .01, 0, 0, 0, CK.throttle);
+  CK.stick = new THREE.Group(); CK.stick.position.set(0, -.74, -.42); S.add(CK.stick);
+  add(new THREE.CylinderGeometry(.06, .08, .05, 14), darkM, 0, 0, 0, 0, 0, 0, CK.stick);
+  add(new THREE.CylinderGeometry(.013, .016, .34, 10), metalM, 0, .17, 0, 0, 0, 0, CK.stick);
+  add(new THREE.BoxGeometry(.04, .09, .045), darkM, 0, .37, 0, -.2, 0, 0, CK.stick); add(new THREE.BoxGeometry(.012, .012, .012), new THREE.MeshBasicMaterial({ color: 0xaa2222 }), 0, .415, -.02, 0, 0, 0, CK.stick);
+  add(new THREE.SphereGeometry(.05, 12, 8), gloveM, .0, .37, .02, 0, 0, 0, CK.stick);
+  // pilot's legs
+  for (const sx of [-1, 1]) { const th = add(new THREE.CylinderGeometry(.075, .085, .55, 12), suitM, sx * .14, -.66, -.28, -1.35, 0, 0); th.scale.z = .85;
+    add(new THREE.SphereGeometry(.085, 12, 8), suitM, sx * .14, -.6, -.55); }
+  // canopy bow (windscreen frame) and rear-view mirrors
+  for (const sx of [-1, 1]) {
+    const curve = new THREE.CatmullRomCurve3([new V3(sx * .52, -.22, -.82), new V3(sx * .45, .06, -.74), new V3(sx * .26, .3, -.52), new V3(0, .37, -.34)]);
+    add(new THREE.TubeGeometry(curve, 28, .024, 8, false), coamM, 0, 0, 0);
+    add(new THREE.BoxGeometry(.13, .045, .012), mirrorM, sx * .15, .315, -.43, .55, sx * -.2, 0);
+  }
+  // canopy glass: faint reflective shell
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xa8bccb, transparent: true, opacity: .05, metalness: 1, roughness: .04, depthWrite: false, side: THREE.BackSide }));
+  shell.scale.set(.62, .6, 1.25); shell.position.set(0, -.22, -.05); S.add(shell);
+  CK.built = true;
+}
+// cockpit displays: left radar, centre attitude/engine, right stores/damage
+function updateMFDs() {
+  const P = player, blink = Math.floor(performance.now() / 250) % 2 === 0;
+  const [L, C, Rm] = CK.mfd;
+  let c = L.ctx; c.fillStyle = '#020806'; c.fillRect(0, 0, 256, 256); c.shadowBlur = 0; drawRadar(c, 128, 132, 104, 1.05, blink);
+  c.fillStyle = HUDC; c.font = '13px ' + MONO; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText('RDR  TWS', 8, 6); L.tex.needsUpdate = true;
+  // attitude director + engine strip
+  c = C.ctx; c.fillStyle = '#05080a'; c.fillRect(0, 0, 256, 256);
+  const pitch = Math.asin(clamp(P.fwd.y, -1, 1)) * 180 / Math.PI, bank = Math.atan2(-P.right.y, P.up.y);
+  c.save(); c.beginPath(); c.arc(128, 104, 82, 0, Math.PI * 2); c.clip(); c.translate(128, 104); c.rotate(-bank);
+  const py = pitch * 2.6; c.fillStyle = '#2d6aa8'; c.fillRect(-200, -400 + py, 400, 400); c.fillStyle = '#6b4a2a'; c.fillRect(-200, py, 400, 400);
+  c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(-200, py); c.lineTo(200, py); c.stroke();
+  c.lineWidth = 1; c.fillStyle = '#fff'; c.font = '10px ' + MONO; c.textAlign = 'left';
+  for (let a = -30; a <= 30; a += 10) { if (!a) continue; const y = py - a * 2.6; c.beginPath(); c.moveTo(-22, y); c.lineTo(22, y); c.stroke(); c.fillText(String(Math.abs(a)), 26, y + 3); }
+  c.restore();
+  c.strokeStyle = '#ffd24a'; c.lineWidth = 3; c.beginPath(); c.moveTo(78, 104); c.lineTo(110, 104); c.lineTo(118, 112); c.moveTo(178, 104); c.lineTo(146, 104); c.lineTo(138, 112); c.stroke(); c.fillStyle = '#ffd24a'; c.fillRect(126, 102, 4, 4);
+  c.strokeStyle = '#3a4a44'; c.lineWidth = 2; c.beginPath(); c.arc(128, 104, 82, 0, Math.PI * 2); c.stroke();
+  c.fillStyle = HUDC; c.font = '14px ' + MONO; c.textAlign = 'center'; c.textBaseline = 'top';
+  c.fillText(String(Math.round((Math.atan2(P.fwd.x, -P.fwd.z) * 180 / Math.PI + 360) % 360)).padStart(3, '0'), 128, 192);
+  const bars = [['THR', P.throttle, P.throttle > .85 ? '#ffb35c' : HUDC], ['N2', .55 + P.throttle * .44, HUDC], ['G', clamp(P.g / 9, 0, 1), P.g > 7 ? WARN : HUDC]];
+  bars.forEach(([n, v, col], i) => { const x = 28 + i * 100, y = 214; c.fillStyle = '#123'; c.fillRect(x, y, 70, 9); c.fillStyle = col; c.fillRect(x, y, 70 * clamp(v, 0, 1), 9); c.font = '11px ' + MONO; c.textAlign = 'left'; c.fillText(n, x, y + 12); });
+  C.tex.needsUpdate = true;
+  // stores management + damage
+  c = Rm.ctx; c.fillStyle = '#05080a'; c.fillRect(0, 0, 256, 256);
+  const dmg = (1 - P.hp / P.maxHp) * 100, dcol = dmg < 34 ? HUDC : dmg < 67 ? AMBER : WARN;
+  drawPlaneIcon(c, 128, 92, 4.2, dcol);
+  const st = [[-3, 0], [3, 1], [-1.4, 2], [1.4, 3]];
+  for (const [dx, i] of st) { const ready = P.pylon[i] <= 0 && P.msl > 0; c.fillStyle = ready ? HUDC : '#334'; c.fillRect(128 + dx * 14 - 4, 100, 8, 22); }
+  c.fillStyle = HUDC; c.font = '15px ' + MONO; c.textAlign = 'left'; c.textBaseline = 'top';
+  c.fillText(`MSL ${P.msl}`, 12, 168); c.fillText(`${ST.sp.n} ${ST.sp.kind === 'laser' ? Math.ceil(P.sp) + 's' : P.sp}`, 12, 188); c.fillText(`GUN ${P.gun}`, 140, 168); c.fillText(`FLR ${P.flares}`, 140, 188);
+  c.fillStyle = dcol; c.fillText(`DMG ${Math.round(dmg)}%`, 12, 214); c.fillStyle = HUDC; c.fillText('SMS', 12, 8);
+  if (P.ram && blink) { c.fillStyle = AMBER; c.fillText('RAM', 196, 8); }
+  Rm.tex.needsUpdate = true;
+}
+function updateCockpit(dt) {
+  const P = player;
+  if (!CK.built) buildCockpit();
+  const t = performance.now() / 1000, tg = clamp(P.g - 1, -2, 8);
+  // head: G pushes it down, roll throws it sideways, eyes lead into the turn
+  CK.head.lerp(_v1.set(-P.cr * .012 + Math.sin(t * 1.3) * .0015, -tg * .007 + Math.sin(t * 1.7) * .002, tg * .002), 1 - Math.exp(-dt * 6));
+  CK.look.x += (clamp(-.1 + P.cp * .06, -.16, -.02) - CK.look.x) * (1 - Math.exp(-dt * 3));
+  CK.look.y += (clamp(-P.cr * .07 - P.cy * .05, -.12, .12) - CK.look.y) * (1 - Math.exp(-dt * 3));
+  _q1.setFromEuler(CK.look);
+  camera.position.copy(_v1.set(0, .95, -5.2).add(CK.head).applyQuaternion(P.quat).add(P.pos));
+  camera.quaternion.copy(P.quat).multiply(_q1);
+  CK.cam.position.copy(CK.head); CK.cam.quaternion.copy(_q1);
+  CK.cam.fov = camera.fov; CK.cam.aspect = camera.aspect; CK.cam.updateProjectionMatrix(); CK.cam.updateMatrixWorld();
+  // sunlight moves through the cockpit as the jet rolls
+  CK.sun.position.copy(sunDir).applyQuaternion(_q1.copy(P.quat).invert()).multiplyScalar(5);
+  CK.stick.rotation.set(-P.cp * .28, 0, -P.cr * .32); CK.throttle.position.z = -.22 - P.throttle * .16;
+  CK.needles[0].rotation.z = -clamp(P.speed * 3.6 / 2000, 0, 1) * Math.PI * 1.8; CK.needles[1].rotation.z = -(P.pos.y % 1000) / 1000 * Math.PI * 2;
+  const blink = Math.floor(t * 4) % 2 === 0, states = [alertLevel > 0 && blink ? 0xff3020 : 0, locked ? 0xffb020 : 0, P.throttle > .85 ? 0x40ff70 : 0, P.hp / P.maxHp < .5 ? 0xff3020 : 0, P.speed < 85 && blink ? 0xff3020 : 0, P.g > 7 ? 0xffb020 : 0];
+  CK.lights.forEach((m, i) => { m.material.color.setHex(states[i] || 0x2a2a2a); if (states[i]) m.material.color.multiplyScalar(2.2); });
+  CK.mfdT -= dt; if (CK.mfdT <= 0) { CK.mfdT = .1; updateMFDs(); }
+  // oxygen mask breathing, faster under G
+  CK.breathT -= dt; if (CK.breathT <= 0) { CK.breathT = 3.6 - clamp(tg, 0, 8) * .28; sfxNoise(.8, 700, .07, 'bandpass', 300, .6); after(1.3, () => { if (CK.active) sfxNoise(1.1, 500, .05, 'bandpass', 900, .6); }); }
+  // where the HUD combiner sits on screen, so the HUD can be drawn only inside the glass
+  const a = _v2.copy(CK.comb[0]).project(CK.cam), b = _v3.copy(CK.comb[1]).project(CK.cam);
+  CK.rect = { x: (a.x * .5 + .5) * W, y: (-b.y * .5 + .5) * H, w: (b.x - a.x) * .5 * W, h: (b.y - a.y) * .5 * H };
+}
+function renderCockpit() {
+  if (!CK.active || !CK.built) return;
+  renderer.autoClear = false; renderer.clearDepth(); renderer.render(CK.scene, CK.cam); renderer.autoClear = true;
 }
 
 /* ================= HUD ================= */
@@ -1898,37 +2046,17 @@ function drawPlaneIcon(c, x, y, s, col) {
   c.moveTo(0, -16); c.lineTo(2.5, -9); c.lineTo(2.5, -3); c.lineTo(13, 4); c.lineTo(13, 7); c.lineTo(2.5, 5); c.lineTo(2.2, 11); c.lineTo(6, 14); c.lineTo(6, 16); c.lineTo(0, 15);
   c.lineTo(-6, 16); c.lineTo(-6, 14); c.lineTo(-2.2, 11); c.lineTo(-2.5, 5); c.lineTo(-13, 7); c.lineTo(-13, 4); c.lineTo(-2.5, -3); c.lineTo(-2.5, -9); c.closePath(); c.fill(); c.restore();
 }
-function drawCockpit(c, s) {
-  // canopy bow and frame
-  c.save(); c.shadowBlur = 0; c.fillStyle = '#0a0d0f'; c.strokeStyle = '#1b2125';
-  c.beginPath(); c.moveTo(0, 0); c.lineTo(W * .1, 0); c.quadraticCurveTo(W * .02, H * .3, 0, H * .62); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(W, 0); c.lineTo(W * .9, 0); c.quadraticCurveTo(W * .98, H * .3, W, H * .62); c.closePath(); c.fill();
-  // dashboard
-  const top = H * .74;
-  c.beginPath(); c.moveTo(0, H); c.lineTo(0, top + 30 * s); c.quadraticCurveTo(W * .25, top - 10 * s, W * .5, top - 18 * s); c.quadraticCurveTo(W * .75, top - 10 * s, W, top + 30 * s); c.lineTo(W, H); c.closePath();
-  const gr = c.createLinearGradient(0, top - 20 * s, 0, H); gr.addColorStop(0, '#20262a'); gr.addColorStop(1, '#0b0e10'); c.fillStyle = gr; c.fill();
-  c.strokeStyle = '#333c42'; c.lineWidth = 2; c.stroke();
-  // HUD combiner glass
-  c.strokeStyle = 'rgba(120,150,150,.35)'; c.lineWidth = 2;
-  c.beginPath(); c.moveTo(W / 2 - 170 * s, top - 14 * s); c.lineTo(W / 2 - 150 * s, H * .2); c.moveTo(W / 2 + 170 * s, top - 14 * s); c.lineTo(W / 2 + 150 * s, H * .2); c.stroke();
-  c.fillStyle = 'rgba(140,200,190,.04)'; c.fillRect(W / 2 - 150 * s, H * .2, 300 * s, top - H * .2 - 14 * s);
-  // MFD bezels
-  const mw = Math.min(190 * s, W * .22), my = top + 24 * s;
-  [W * .5 - mw * 1.7, W * .5 + mw * .7].forEach(x => { c.fillStyle = '#05080a'; c.fillRect(x - 8, my - 8, mw + 16, mw * .8 + 16); c.strokeStyle = '#3b454b'; c.strokeRect(x - 8, my - 8, mw + 16, mw * .8 + 16);
-    for (let i = 0; i < 5; i++) { c.fillStyle = '#2a3236'; c.fillRect(x + i * mw / 5 + 6, my - 6, mw / 5 - 12, 4); } });
-  c.restore();
-  return { mw, my, lx: W * .5 - mw * 1.7, rx: W * .5 + mw * .7 };
-}
 function drawHUD() {
   const c = hx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
   if (state === 'title' || state === 'result' || state === 'mlobby' || state === 'hangar') return;
-  const s = clamp(Math.min(W, H) / 820, .58, 1.25), cx = W / 2, cy = H / 2, P = player, now = performance.now() / 1000;
+  const P = player, cockpit = camView === 1 && P.alive && !lookingAtTarget && state === 'play';
+  const s0 = clamp(Math.min(W, H) / 820, .58, 1.25), s = cockpit ? s0 * .68 : s0, cx = W / 2, cy = H / 2, now = performance.now() / 1000;
   const blink = Math.floor(now * 4) % 2 === 0;
   const font = (px, f = MONO) => { c.font = `${Math.round(px * s)}px ${f}`; };
-  const cockpit = camView === 1 && P.alive && !lookingAtTarget;
-  let mfd = null; if (cockpit) mfd = drawCockpit(c, s);
   c.lineWidth = Math.max(1.2, 1.5 * s); c.strokeStyle = HUDC; c.fillStyle = HUDC; c.lineJoin = 'round';
   c.shadowColor = 'rgba(40,255,140,.5)'; c.shadowBlur = quality === 'low' ? 0 : 3;
+  const RC = cockpit && CK.rect && CK.rect.w > 20 ? CK.rect : null;
+  if (RC) { c.save(); c.beginPath(); c.rect(RC.x - 4, RC.y - 4, RC.w + 8, RC.h + 8); c.clip(); }
 
   let fpmX = cx, fpmY = cy;
   if (P.alive) {
@@ -2042,7 +2170,7 @@ function drawHUD() {
   if (hitMarkT > 0) { const r1 = 8 * s, r2 = 16 * s; c.strokeStyle = '#fff'; c.lineWidth = 2 * s; c.beginPath(); for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { c.moveTo(rcx + a * r1, rcy + b * r1); c.lineTo(rcx + a * r2, rcy + b * r2); } c.stroke(); c.strokeStyle = HUDC; c.lineWidth = Math.max(1.2, 1.5 * s); }
 
   // speed & altitude tapes
-  const off = Math.min(255 * s, W * .36), half = 120 * s;
+  const off = RC ? RC.w * .3 : Math.min(255 * s, W * .36), half = RC ? RC.h * .3 : 120 * s;
   const tape = (x, val, step, every, pxPer, right, label, boxText) => {
     c.save(); c.beginPath(); c.rect(x - 70 * s, cy - half, 140 * s, half * 2); c.clip();
     const range = half / pxPer, start = Math.floor((val - range) / step) * step; font(11); c.textBaseline = 'middle';
@@ -2090,7 +2218,7 @@ function drawHUD() {
 
   // heading tape
   const hdg = (Math.atan2(P.fwd.x, -P.fwd.z) * 180 / Math.PI + 360) % 360;
-  const hy = 46 * s + 8, hw = 220 * s, hp = 4.4 * s;
+  const hy = RC ? RC.y + 26 * s : 46 * s + 8, hw = RC ? RC.w * .45 : 220 * s, hp = 4.4 * s;
   c.save(); c.beginPath(); c.rect(cx - hw, hy - 20 * s, hw * 2, 44 * s); c.clip(); font(11); c.textAlign = 'center'; c.textBaseline = 'bottom';
   for (let a = Math.floor((hdg - 55) / 5) * 5; a <= hdg + 55; a += 5) {
     const x = cx + (a - hdg) * hp, n = ((a % 360) + 360) % 360, major = n % 10 === 0;
@@ -2103,6 +2231,7 @@ function drawHUD() {
   c.fillStyle = 'rgba(0,18,10,.4)'; c.fillRect(cx - 24 * s, hy - 26 * s, 48 * s, 22 * s); c.fillStyle = HUDC; c.strokeRect(cx - 24 * s, hy - 26 * s, 48 * s, 22 * s);
   font(14); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(Math.round(hdg) % 360).padStart(3, '0'), cx, hy - 15 * s);
 
+  if (RC) c.restore();
   // objective (top-left)
   const pad = 18 * s + 4;
   font(12); c.textAlign = 'left'; c.textBaseline = 'top';
@@ -2135,12 +2264,12 @@ function drawHUD() {
     }
   }
 
-  // radar
-  if (cockpit && mfd) { drawRadar(c, mfd.lx + mfd.mw / 2, mfd.my + mfd.mw * .4, mfd.mw * .38, s * .85, blink); }
-  else { const rr = 92 * s; drawRadar(c, isTouch ? W - pad - rr - 10 * s : pad + rr + 10 * s, isTouch ? pad + rr + 60 * s : H - pad - rr - 10 * s, rr, s, blink); }
+  // radar (in the cockpit view it lives on the left MFD)
+  if (!cockpit) { const rr = 92 * s; drawRadar(c, isTouch ? W - pad - rr - 10 * s : pad + rr + 10 * s, isTouch ? pad + rr + 60 * s : H - pad - rr - 10 * s, rr, s, blink); }
 
   // weapons & damage panel
-  const wx = cockpit && mfd ? mfd.rx + mfd.mw - 6 : W - pad, wy = cockpit && mfd ? mfd.my + mfd.mw * .76 : H - pad - (isTouch ? 170 * s + 60 : 0);
+  if (!cockpit) {
+  const wx = W - pad, wy = H - pad - (isTouch ? 170 * s + 60 : 0);
   c.textAlign = 'right'; c.textBaseline = 'bottom'; font(15);
   const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN],
     ['[G] ' + ST.sp.n + ' ' + (ST.sp.kind === 'laser' ? Math.ceil(P.sp) + 's' : P.sp) + (P.spCd > 0 ? ' ·' : ''), P.sp > 0 ? (laser.on ? WARN : AMBER) : WARN], [`[F] MSL ${P.msl}`, P.msl ? HUDC : WARN],
@@ -2157,6 +2286,7 @@ function drawHUD() {
   drawPlaneIcon(c, wx - 130 * s, py0 - 10 * s, 1.5 * s, dcol);
   c.fillStyle = dcol; font(13); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(`DMG ${Math.round(dmg)}%`, wx - 130 * s, py0 + 18 * s);
   c.fillStyle = HUDC;
+  }
 
   // warnings
   c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -2187,7 +2317,7 @@ function drawHUD() {
   c.globalAlpha = 1;
   // radio subtitle
   if (radioCur) {
-    const bw = Math.min(600 * s, W - 2 * pad), by = cockpit ? H * .74 - 70 * s : H - pad - (isTouch ? 210 * s + 60 : 54 * s), bx = cx - bw / 2;
+    const bw = Math.min(600 * s, W - 2 * pad), by = cockpit ? 96 * s0 : H - pad - (isTouch ? 210 * s + 60 : 54 * s), bx = cx - bw / 2;
     c.shadowBlur = 0; c.fillStyle = 'rgba(0,14,10,.6)'; c.fillRect(bx, by, bw, 46 * s);
     c.fillStyle = radioCur.who === 'VANTA' ? AMBER : HUDC; c.fillRect(bx, by, 3 * s, 46 * s);
     c.textAlign = 'left'; c.textBaseline = 'top'; font(11); c.fillText(radioCur.who, bx + 12 * s, by + 6 * s);
@@ -2752,7 +2882,7 @@ function renderHangar() {
     box.append(sec);
   }
   const st = stats(), w = loadWeight(), cap = part('frame').cap, over = w > cap;
-  const bars = [['耐久', st.hp / 1.8], ['旋回', st.turn / 1.3], ['最高速', st.spd / 1.15], ['加速', st.thr * st.spd * st.spd / 1.3], ['積載', w / cap]];
+  const bars = [['耐久', st.hp / 1.8], ['旋回', st.turn / 1.3], ['最高速', st.spd / 1.3], ['加速', st.thr * st.spd * st.spd / 1.3], ['積載', w / cap]];
   const sb = $('#hgStats'); sb.textContent = '';
   for (const [n, v] of bars) { const r = document.createElement('div'); r.className = 'stat' + (n === '積載' && over ? ' over' : '');
     const a = document.createElement('span'); a.textContent = n; const t = document.createElement('i'); const f = document.createElement('b'); f.style.width = Math.round(clamp(v, 0, 1) * 100) + '%'; t.append(f);
