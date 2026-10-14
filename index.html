@@ -166,11 +166,11 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
         <div><kbd>Shift</kbd>＋<kbd>Z</kbd>ハイG旋回</div>
         <div><kbd>X</kbd>ロック解除</div>
         <div><kbd>H</kbd>操作ガイド表示</div>
-        <div><kbd>G</kbd>特殊兵装に切替（レーザーは F 長押し）</div>
+        <div><kbd>G</kbd>特殊兵装を発射（TLS は長押し）</div>
         <div><kbd>M</kbd>消音</div>
         <div><kbd>C</kbd>視点切替 / <kbd>P</kbd>ポーズ</div>
       </div>
-      <p class="touch-only" style="font-size:12.5px;color:var(--muted)">左半分をドラッグで操縦。右下ボタンで MSL（ミサイル）・GUN（機銃）・BST（加速）・BRK（減速）・TGT（切替）・FLR（フレア）。ゲームパッドにも対応。</p>
+      <p class="touch-only" style="font-size:12.5px;color:var(--muted)">左半分をドラッグで操縦。右下ボタンで MSL（ミサイル）・GUN（機銃）、右上の SP で特殊兵装・BST（加速）・BRK（減速）・TGT（切替）・FLR（フレア）。ゲームパッドにも対応。</p>
       <div class="opts">
         <label for="optInvert"><input type="checkbox" id="optInvert"> 操縦反転（W で機首上げ）</label>
         <label for="optBeginner"><input type="checkbox" id="optBeginner"> 初心者モード（HP無限）</label>
@@ -264,7 +264,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
   <div><span>ピッチ</span><kbd>W / S</kbd></div><div><span>ロール</span><kbd>A / D</kbd></div><div><span>ヨー</span><kbd>Q / E</kbd></div>
   <div><span>加速 / 減速</span><kbd>Shift / Z</kbd></div><div><span>ハイG旋回</span><kbd>Shift+Z</kbd></div>
   <h3>WEAPONS</h3>
-  <div><span>ミサイル</span><kbd>F</kbd></div><div><span>特殊兵装切替</span><kbd>G</kbd></div><div><span>機銃</span><kbd>Space</kbd></div><div><span>ロック切替</span><kbd>R</kbd></div>
+  <div><span>ミサイル</span><kbd>F</kbd></div><div><span>特殊兵装</span><kbd>G</kbd></div><div><span>機銃</span><kbd>Space</kbd></div><div><span>ロック切替</span><kbd>R</kbd></div>
   <div><span>ロック解除</span><kbd>X</kbd></div><div><span>フレア</span><kbd>V</kbd></div>
   <h3>VIEW</h3>
   <div><span>ターゲット視点</span><kbd>T</kbd></div><div><span>視点切替</span><kbd>C</kbd></div><div><span>ガイド表示</span><kbd>H</kbd></div><div><span>ポーズ / 消音</span><kbd>P / M</kbd></div>
@@ -272,7 +272,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 
 <div id="touch" hidden>
   <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div></div>
-  <div id="topbtns"><button data-act="weapon">WPN</button><button data-act="cam">CAM</button><button data-act="pause">II</button></div>
+  <div id="topbtns"><button data-act="weapon">SP</button><button data-act="cam">CAM</button><button data-act="pause">II</button></div>
   <div id="tbtns">
     <button data-hold="brake">BRK</button><button data-act="target">TGT</button><button data-act="flare">FLR</button>
     <button data-hold="boost">BST</button><button data-hold="gun" class="big">GUN</button><button data-act="missile" class="big">MSL</button>
@@ -482,6 +482,18 @@ const missileGeo = (() => {
 })();
 const missileMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: .25, roughness: .45 });
 function makeMissileMesh() { return new THREE.Mesh(missileGeo, missileMat); }
+const rocketGeo = (() => { const parts = [], rx = g => { g.rotateX(-Math.PI / 2); return g; };
+  parts.push({ geo: rx(new THREE.CylinderGeometry(.09, .09, 1.5, 8)), color: 0x3c4046 });
+  parts.push({ geo: rx(new THREE.ConeGeometry(.09, .3, 8)).translate(0, 0, -.9), color: 0xc8302a });
+  for (let k = 0; k < 3; k++) parts.push({ geo: new THREE.BoxGeometry(.02, .2, .3).translate(0, .16, .6).rotateZ(k * Math.PI * 2 / 3), color: 0x2a2d30 });
+  return mergeParts(parts); })();
+const bombGeo = (() => { const parts = [], rx = g => { g.rotateX(-Math.PI / 2); return g; };
+  parts.push({ geo: rx(new THREE.CylinderGeometry(.32, .32, 1.6, 12)), color: 0x4d5a3c });
+  parts.push({ geo: rx(new THREE.SphereGeometry(.32, 12, 8)).translate(0, 0, -.8), color: 0x4d5a3c });
+  parts.push({ geo: rx(new THREE.ConeGeometry(.32, .9, 12)).rotateX(Math.PI).translate(0, 0, 1.25), color: 0x3f4a31 });
+  parts.push({ geo: rx(new THREE.CylinderGeometry(.33, .33, .08, 12)).translate(0, 0, -.35), color: 0xd4a62a });
+  for (let k = 0; k < 4; k++) parts.push({ geo: new THREE.BoxGeometry(.03, .5, .5).translate(0, .3, 1.45).rotateZ(Math.PI / 4 + k * Math.PI / 2), color: 0x3f4a31 });
+  return mergeParts(parts); })();
 
 function flatPart(points, depth, mat) {
   const sh = new THREE.Shape(); sh.moveTo(points[0][0], points[0][1]); for (let i = 1; i < points.length; i++) sh.lineTo(points[i][0], points[i][1]);
@@ -492,7 +504,7 @@ const pivot = (parent, x, y, z) => { const p = new THREE.Group(); p.position.set
 // Aircraft builder. o.shape: std (twin-tail fighter) | heavy (std + conformal tanks) | delta (canard delta, single fin)
 // | fsw (forward-swept wing + canards) | wing (B-2 style flying wing). o.armor 0-2, o.eng std|turbo|light, o.sp special-weapon id.
 function makeJet(o) {
-  const shape = o.shape || 'std', g = new THREE.Group();
+  const shape = o.shape || 'classic', g = new THREE.Group();
   const body = new THREE.MeshStandardMaterial({ color: o.body, metalness: .4, roughness: .5 });
   const dark = new THREE.MeshStandardMaterial({ color: o.dark, metalness: .35, roughness: .6 });
   const tailM = new THREE.MeshStandardMaterial({ color: o.tail, metalness: .3, roughness: .5 });
@@ -547,17 +559,22 @@ function makeJet(o) {
     u.stab[1] = dummy(); u.stab[-1] = dummy(); u.rud[1] = dummy(); u.rud[-1] = dummy(); u.brake = dummy(); u.fm = .55;
     u.pylons = [u.pylons[1], u.pylons[3], u.pylons[0], u.pylons[2]];
   } else {
-    // ---- conventional fuselage
-    const big = shape === 'heavy' ? 1.12 : 1;
-    let geo = new THREE.CylinderGeometry(0.8, 1.15, 13, 16); geo.rotateX(-Math.PI / 2);
-    const fus = new THREE.Mesh(geo, body); fus.position.z = 0.5; fus.scale.set(1.12 * big, .8 * big, 1); g.add(fus);
-    geo = new THREE.ConeGeometry(0.8, 4.8, 16); geo.rotateX(-Math.PI / 2);
-    const nose = new THREE.Mesh(geo, dark); nose.position.z = -8.4; nose.scale.set(1.12 * big, .8 * big, 1); g.add(nose);
-    const can = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glass); can.scale.set(.6, .56, shape === 'heavy' ? 2.9 : 2.2); can.position.set(0, .62, shape === 'heavy' ? -4.0 : -4.3); g.add(can);
-    box(1.1, .5, 7, body, 0, .55, 1.5);
+    // ---- conventional fuselage. std = faceted stealth STRIKER, heavy = wide platypus-nosed FORTRESS, classic = older twin-tail (enemy line fighters)
+    const heavy = shape === 'heavy', stealthy = shape === 'std', wide = heavy ? 1.5 : 1, big = heavy ? 1.1 : 1;
+    let geo = new THREE.CylinderGeometry(0.8, 1.15, 13, stealthy ? 6 : 16); geo.rotateX(-Math.PI / 2);
+    const fus = new THREE.Mesh(geo, body); fus.position.z = 0.5; fus.scale.set(1.12 * wide * (stealthy ? 1.2 : 1), (stealthy ? .62 : .8) * big, 1); if (stealthy) fus.rotation.z = Math.PI / 6; g.add(fus);
+    geo = new THREE.ConeGeometry(0.8, heavy ? 5.6 : 4.8, stealthy ? 4 : 16); geo.rotateX(-Math.PI / 2);
+    const nose = new THREE.Mesh(geo, dark); nose.position.z = heavy ? -8.8 : -8.4;
+    if (stealthy) { nose.rotation.z = Math.PI / 4; nose.scale.set(1.25, .7, 1); } else if (heavy) nose.scale.set(1.12 * wide, .5, 1); else nose.scale.set(1.12, .8, 1);
+    g.add(nose);
+    const can = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glass);
+    if (heavy) { can.scale.set(1.15, .55, 2.6); can.position.set(0, .7, -4.6); } else if (stealthy) { can.scale.set(.62, .5, 2.6); can.position.set(0, .5, -4.6); } else { can.scale.set(.6, .56, 2.2); can.position.set(0, .62, -4.3); }
+    g.add(can);
+    box(1.1 * wide, .5, 7, body, 0, stealthy ? .4 : .55, 1.5);
+    if (heavy) { box(1.2, .55, 3.2, dark, 0, -.2, 8.2); } // tail stinger between the engines
     for (const sx of [-1, 1]) {
-      box(.9, 1.15, 5.2, dark, sx * 1.3 * big, -.22, -1.4);
-      box(.75, .95, .1, new THREE.MeshBasicMaterial({ color: 0x050607 }), sx * 1.3 * big, -.22, -4.02);
+      if (stealthy) { const ci = box(.9, 1.0, 4.6, dark, sx * 1.35, -.15, -1.2); ci.rotation.z = sx * .35; ci.rotation.y = -sx * .12; } // caret intakes
+      else { box(.9, 1.15, 5.2, dark, sx * 1.3 * wide, -.22, -1.4); box(.75, .95, .1, new THREE.MeshBasicMaterial({ color: 0x050607 }), sx * 1.3 * wide, -.22, -4.02); }
       const side = new THREE.Group(); side.scale.x = sx; g.add(side);
       if (shape === 'delta') {
         side.add(flatPart([[0.9, -4.2], [6.8, 3.0], [6.8, 3.6], [0.9, 3.6]], .2, body));
@@ -570,9 +587,28 @@ function makeJet(o) {
         u.ail[sx] = hinge(side, 6.0, .02, -1.25, .71, 2.4, .7, surf); u.flap[sx] = hinge(side, 2.9, .02, 1.45, .71, 2.4, .8, surf);
         u.stab[sx] = pivot(side, 1.4, .3, -5.6); u.stab[sx].add(flatPart([[-.2, -.6], [1.9, .1], [1.9, .6], [-.2, .7]], .1, body)); // canard
         u.rud[sx] = fin(side, 1.0, .46, 3.6, -.38, 3.0, 2.7);
-        const tail = flatPart([[0.8, 5.4], [3.2, 7.2], [3.2, 8.0], [0.8, 8.0]], .14, body); side.add(tail);
+        side.add(flatPart([[0.8, 5.4], [3.2, 7.2], [3.2, 8.0], [0.8, 8.0]], .14, body));
         navLight(sx * 7.6, .02, -2.6, sx < 0); missileAt(sx * 6.2, -.35, -1.6); missileAt(sx * 3.2, -.5, 1.2);
+      } else if (stealthy) {
+        // trapezoid wing with a forward-swept trailing edge, chines, sharply canted tails
+        side.add(flatPart([[0.9, -6.6], [1.7, -3.4], [1.7, -1.5], [0.9, -1.5]], .12, body));
+        side.add(flatPart([[1.1, -1.5], [7.2, 2.5], [7.2, 3.3], [1.1, 3.9]], .2, body));
+        u.flap[sx] = hinge(side, 2.6, .02, 3.78, -.082, 2.8, .8, surf); u.ail[sx] = hinge(side, 5.6, .02, 3.53, -.082, 2.6, .7, surf);
+        u.stab[sx] = pivot(side, 1.6, 0, 6.5); u.stab[sx].add(flatPart([[-.4, -.7], [2.5, .5], [2.5, 1.3], [-.4, 1.4]], .14, body));
+        u.rud[sx] = fin(side, 1.15, .3, 3.6, -.55, 2.8, 2.6);
+        navLight(sx * 7.2, .02, 2.9, sx < 0); missileAt(sx * 6.4, -.3, 2.2); missileAt(sx * 3.4, -.5, 1.6);
+      } else if (heavy) {
+        // big swept wing, small canards, upright twin tails, conformal tanks
+        side.add(flatPart([[1.4, -2.8], [9.4, 2.9], [9.4, 4.1], [1.4, 4.1]], .24, body));
+        side.add(flatPart([[1.3, -7.0], [2.4, -3.2], [2.8, -2.8], [1.3, -2.8]], .14, body));
+        u.flap[sx] = hinge(side, 3.4, .02, 4.1, 0, 3.6, 1.0, surf); u.ail[sx] = hinge(side, 7.4, .02, 4.1, 0, 3.4, .8, surf);
+        u.stab[sx] = pivot(side, 2.2, .1, 7.2); u.stab[sx].add(flatPart([[-.6, -1.0], [2.8, .9], [2.8, 1.8], [-.6, 1.6]], .16, body));
+        u.rud[sx] = fin(side, 1.7, .5, 3.8, -.06, 3.9, 3.2);
+        box(1.0, .9, 8, body, 2.25, -.05, .2, side); // conformal fuel tank
+        navLight(sx * 9.4, .02, 3.5, sx < 0); missileAt(sx * 8.8, -.35, 3.0); missileAt(sx * 4.6, -.6, 2.0);
+        box(.12, .34, 1.5, dark, 4.6, -.2, 2.0, side); box(.14, .16, 2.2, dark, 8.8, -.12, 3.1, side);
       } else {
+        // classic twin-tail fighter
         side.add(flatPart([[0.85, -6.2], [1.6, -2.6], [2.4, -1.0], [0.85, -1.0]], .14, body));
         side.add(flatPart([[0.9, -2.2], [8.0, 2.6], [8.0, 3.6], [0.9, 3.6]], .2, body));
         u.flap[sx] = hinge(side, 2.95, .02, 3.6, 0, 3.4, .9, surf); u.ail[sx] = hinge(side, 6.4, .02, 3.6, 0, 3.0, .75, surf);
@@ -581,13 +617,12 @@ function makeJet(o) {
         side.add(flatPart([[7.95, 2.4], [8.3, 2.4], [8.3, 3.7], [7.95, 3.7]], .16, body));
         box(.14, .16, 2.2, dark, 8.3, -.1, 2.7, side); box(.12, .34, 1.5, dark, 3.6, -.18, 1.9, side);
         navLight(sx * 8.02, .02, 3.1, sx < 0); missileAt(sx * 8.3, -.33, 2.6); missileAt(sx * 3.6, -.56, 1.9);
-        if (shape === 'heavy') box(.95, .85, 7.5, body, 1.75, -.05, .4, side); // conformal fuel tanks
       }
-      nozzle(sx * .62 * big, -.02, 7.0);
+      nozzle(sx * (heavy ? .95 : stealthy ? .55 : .62), -.02, heavy ? 7.6 : 7.0, stealthy);
     }
     if (shape === 'delta') { u.rud[1] = fin(g, .08, .5, 2.6, 0, 3.8, 3.4); u.rud[-1] = dummy(); }
     u.pylons = [u.pylons[0], u.pylons[2], u.pylons[1], u.pylons[3]];
-    const sb = pivot(g, 0, .82, -.3); box(1.25, .07, 2.1, surf, 0, 0, 1.05, sb); u.brake = sb;
+    const sb = pivot(g, 0, stealthy ? .62 : .82, -.3); box(1.25, .07, 2.1, surf, 0, 0, 1.05, sb); u.brake = sb;
   }
   // ---- armour kit: bolted plates
   if (o.armor >= 1) { for (const sx of [-1, 1]) { if (shape === 'wing') box(2.4, .25, 3.2, plate, sx * 5.5, .45, 1.2); else box(.18, .9, 6.5, plate, sx * 1.15, .05, -1.2); } }
@@ -876,7 +911,7 @@ function setMute(m) { SND.muted = m; if (SND.master) SND.master.gain.value = m ?
 
 /* ================= input ================= */
 const keys = {};
-const touch = { pitch: 0, roll: 0, boost: false, brake: false, gun: false, fire: false };
+const touch = { pitch: 0, roll: 0, boost: false, brake: false, gun: false, sp: false };
 let invert = false, padPrev = [];
 addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -893,7 +928,7 @@ function onPress(code) {
   if (state !== 'play' || !player.alive) return;
   if (code === 'KeyX') { if (curTarget) { curTarget = null; lockT = 0; showMsg('LOCK RELEASED', HUDD, 1); } return; }
   if (code === 'KeyF' || code === 'KeyJ') playerFireMissile();
-  else if (code === 'KeyG') switchWeapon();
+  else if (code === 'KeyG') fireSpecial();
   else if (code === 'KeyR' || code === 'Tab') cycleTarget();
   else if (code === 'KeyV') deployFlares();
   else if (code === 'KeyC') { camView = (camView + 1) % 2; post.first = true; }
@@ -906,9 +941,9 @@ function readPad() {
   out.roll = dz(p.axes[0] || 0); out.pitch = dz(p.axes[1] || 0); out.yaw = dz(p.axes[2] || 0) * .8;
   const b = i => p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > .4);
   if (b(4)) out.yaw = -1; if (b(5)) out.yaw = 1;
-  out.boost = b(7); out.brake = b(6); out.gun = b(2); out.look = b(3); out.fire = b(0);
+  out.boost = b(7); out.brake = b(6); out.gun = b(2); out.look = b(3); out.sp = b(12) || b(5);
   const edge = i => b(i) && !padPrev[i];
-  if (state === 'play' && player.alive) { if (edge(0)) playerFireMissile(); if (edge(12)) switchWeapon(); if (edge(3)) cycleTarget(); if (edge(1)) deployFlares(); if (edge(8)) { camView = (camView + 1) % 2; post.first = true; } }
+  if (state === 'play' && player.alive) { if (edge(0)) playerFireMissile(); if (edge(12) || edge(5)) fireSpecial(); if (edge(3)) cycleTarget(); if (edge(1)) deployFlares(); if (edge(8)) { camView = (camView + 1) % 2; post.first = true; } }
   if (edge(9)) { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }
   padPrev = p.buttons.map((_, i) => b(i));
   return out;
@@ -927,7 +962,7 @@ function readInput() {
     brake: !!(keys.KeyZ || pad.brake || touch.brake),
     gun: !!(keys.Space || pad.gun || touch.gun),
     look: !!(keys.KeyT || pad.look),
-    fire: !!(keys.KeyF || keys.KeyJ || pad.fire || touch.fire)
+    spFire: !!(keys.KeyG || pad.sp || touch.sp)
   };
 }
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -945,7 +980,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
     e.preventDefault(); const a = b.dataset.act;
     if (a === 'pause') { if (state === 'play') pauseGame(); return; }
     if (state !== 'play' || !player.alive) return;
-    if (a === 'weapon') switchWeapon(); else if (a === 'missile') { touch.fire = true; playerFireMissile(); } else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
+    if (a === 'weapon') { touch.sp = true; fireSpecial(); } else if (a === 'missile') playerFireMissile(); else if (a === 'target') cycleTarget(); else if (a === 'flare') deployFlares(); else if (a === 'cam') { camView = (camView + 1) % 2; post.first = true; }
   }));
 })();
 
@@ -1016,7 +1051,7 @@ let curTarget = null, lockT = 0, locked = false, alertLevel = 0, lockWarn = fals
 let timeScale = 1, slowmoT = 0, lastKillT = -99, chain = 0;
 let mode = 'mission'; // 'mission' | 'tutorial' | 'multi'
 const opts = { beginner: false, lockMode: 'auto', guide: false };
-let launchAlertT = 0;
+let launchAlertT = 0, retargetT = 0;
 const player = {
   pos: new V3(), vel: new V3(), velDir: new V3(0, 0, -1), quat: new Q4(), fwd: new V3(0, 0, -1), up: new V3(0, 1, 0), right: new V3(1, 0, 0),
   speed: 250, throttle: .55, cp: 0, cr: 0, cy: 0, hp: 100, maxHp: 100, sp: 0, spCd: 0, wsel: 'msl', mlocks: [], alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0,
@@ -1275,7 +1310,7 @@ function ignite(m) {
   fire.emit(nx, ny, nz, m.vel.x * .8, m.vel.y * .8, m.vel.z * .8, .18, 4, 9, 1, .9, .6, 1, .5, .2, 1, 0);
   const d = m.pos.distanceTo(camera.position); sfxNoise(1.3, 1500, clamp(1 - d / 3000, 0, 1) * .6, 'bandpass', 350, .5);
 }
-function switchWeapon() {
+function switchWeapon() { return;
   const P = player; P.wsel = P.wsel === 'msl' ? 'sp' : 'msl'; P.mlocks = []; lockT = 0;
   showMsg(P.wsel === 'sp' ? 'SP: ' + ST.sp.n : 'MSL', HUDC, 1); sfxTone(1200, 900, .06, .05, 'square');
 }
@@ -1295,17 +1330,18 @@ function fireSpecial() {
       _v1.set((k % 2 ? 1 : -1) * 2.2 + rand(-.3, .3), -1 + rand(-.2, .2), -1.5).applyQuaternion(P.quat).add(P.pos);
       _v2.copy(P.fwd).add(_v3.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(.018)).normalize();
       const m = launchMissile(null, _v1, _v2, P.speed + 60, null, 'player', P.up, 0, _v2.clone().multiplyScalar(P.speed + 60), 0);
-      Object.assign(m, { turn: 0, maxSpeed: P.speed + 950, acc: 1500, life: 3.2, dmg: 60, vdmg: sp.vd, rocket: true }); m.mesh.scale.setScalar(.55);
+      Object.assign(m, { turn: 0, maxSpeed: P.speed + 950, acc: 1500, life: 3.2, dmg: 60, vdmg: sp.vd, rocket: true }); m.mesh.geometry = rocketGeo; m.exh.scale.setScalar(1.6); m.exh.position.z = .95;
     }
     sfxNoise(.7, 1600, .55, 'bandpass', 400); shake = Math.max(shake, .3); return;
   }
   if (sp.kind === 'bomb') {
     P.sp--; P.spCd = sp.cd; _v1.set(0, -1.6, 0).applyQuaternion(P.quat).add(P.pos);
     const m = launchMissile(null, _v1, P.fwd, P.speed, null, 'player', P.up, 999, P.vel, 3);
-    Object.assign(m, { bomb: true, life: 40, dmg: 260, vdmg: sp.vd }); m.mesh.scale.set(2, 2, .8); return;
+    Object.assign(m, { bomb: true, life: 40, dmg: 260, vdmg: sp.vd }); m.mesh.geometry = bombGeo; m.exh.visible = false; sfxNoise(.3, 300, .3, 'lowpass'); return;
   }
   if (sp.kind === 'rail') { P.sp--; P.spCd = sp.cd; fireRail(); return; }
-  const targets = sp.multi ? P.mlocks.filter(t => t.alive) : [locked ? curTarget : null];
+  const inEnv = t => t && t.alive && t.pos.distanceTo(P.pos) < sp.range && P.fwd.angleTo(_v4.subVectors(t.pos, P.pos)) < sp.cone;
+  const targets = sp.multi ? P.mlocks.filter(t => t.alive) : [inEnv(curTarget) ? curTarget : null];
   if (sp.multi && !targets.length) { showMsg('NO LOCK', HUDD, .8); return; }
   P.sp--; P.spCd = sp.cd;
   targets.forEach((t, k) => {
@@ -1332,13 +1368,13 @@ function fireRail() {
   const P = player, sp = ST.sp, start = _v6.copy(P.pos).addScaledVector(P.fwd, 9).addScaledVector(P.up, -1);
   const [t, d] = rayHit(start, P.fwd, sp.range, .008), end = start.clone().addScaledVector(P.fwd, d);
   let bm = railBeams.find(x => !x.visible); if (!bm) { bm = makeBeam(new THREE.Color(1.2, 3.5, 7)); railBeams.push(bm); }
-  placeBeam(bm, start, end, 1.1); bm.material.opacity = 1; bm.userData.t = .35;
+  placeBeam(bm, start, end, 1.1); bm.material.opacity = 1; bm.userData.t = .22;
   if (t) { damage(t, 320, true, sp.vd); hitSpark(end); explode(end, .45, false); }
   sfxTone(2600, 160, .4, .2, 'sawtooth'); sfxNoise(.3, 3000, .3, 'highpass'); shake = Math.max(shake, .45); fx.flash = Math.max(fx.flash, .06);
 }
 function updateBeams(dt, inp) {
-  for (const bm of railBeams) if (bm.visible) { bm.userData.t -= dt; bm.material.opacity = Math.max(0, bm.userData.t / .35); bm.scale.x = bm.scale.y = 1.1 * bm.material.opacity + .1; if (bm.userData.t <= 0) bm.visible = false; }
-  const P = player, sp = ST.sp, want = sp.kind === 'laser' && P.wsel === 'sp' && inp && inp.fire && P.alive && !P.frozen && P.sp > 0;
+  for (const bm of railBeams) if (bm.visible) { bm.userData.t -= dt; bm.material.opacity = Math.max(0, bm.userData.t / .22); bm.scale.x = bm.scale.y = 1.1 * bm.material.opacity + .1; if (bm.userData.t <= 0) bm.visible = false; }
+  const P = player, sp = ST.sp, want = sp.kind === 'laser' && inp && inp.spFire && P.alive && !P.frozen && P.sp > 0;
   if (!laser.mesh) { laser.mesh = makeBeam(new THREE.Color(7, .9, .6)); laser.glow = makeBeam(new THREE.Color(2.5, .25, .2)); }
   laser.on = !!want;
   if (!want) { laser.mesh.visible = laser.glow.visible = false; return; }
@@ -1352,7 +1388,6 @@ function updateBeams(dt, inp) {
 }
 function playerFireMissile() {
   if (player.frozen) return;
-  if (player.wsel === 'sp') { fireSpecial(); return; }
   if (player.msl <= 0) { showMsg('NO MISSILES', WARN); return; }
   let i = -1; for (let k = 0; k < 4; k++) { const c = (player.nextPylon + k) % 4; if (player.pylon[c] <= 0) { i = c; break; } }
   if (i < 0) return;
@@ -1405,9 +1440,10 @@ function updateMissiles(dt) {
     }
     m.pos.addScaledVector(m.dir, m.speed * dt);
     m.mesh.position.copy(m.pos); _qT.setFromUnitVectors(NEG_Z, m.dir); m.mesh.quaternion.slerp(_qT, 1 - Math.exp(-dt * 12));
-    m.exh.scale.setScalar(3 + Math.random() * 1.4);
+    m.exh.scale.setScalar(m.rocket ? 1.2 + Math.random() * .6 : 3 + Math.random() * 1.4);
     const seg = m.prev.distanceTo(m.pos), n = Math.min(7, Math.max(1, Math.ceil(seg / 5)));
     for (let k = 0; k < n; k++) { const f = k / n; const x = lerp(m.pos.x, m.prev.x, f) - m.dir.x * 2, y = lerp(m.pos.y, m.prev.y, f) - m.dir.y * 2, z = lerp(m.pos.z, m.prev.z, f) - m.dir.z * 2;
+      if (m.rocket) { if (k === 0) smoke.emit(x, y, z, 0, 0, 0, 1.1, .8, 3.5, .9, .9, .9, .7, .7, .72, .5, .4); continue; }
       smoke.emit(x, y, z, rand(-1, 1), rand(-.5, 1.5), rand(-1, 1), m.owner === 'player' ? 2.8 : 3.4, 1.6, 9, .97, .97, .97, .78, .8, .82, .62, .4); }
     fire.emit(m.pos.x - m.dir.x * 2.2, m.pos.y - m.dir.y * 2.2, m.pos.z - m.dir.z * 2.2, -m.dir.x * 30, -m.dir.y * 30, -m.dir.z * 30, .07, 2.4, 1.2, 1, .8, .5, 1, .5, .2, 1, 0);
     let hit = null;
@@ -1655,6 +1691,8 @@ const RMAX = { air: 5500, ground: 4800 }, RMIN = 350;
 function updateTargeting(dt) {
   if (curTarget && !curTarget.alive) { if (opts.lockMode === 'manual') showMsg('TARGET LOST', HUDD, 1); curTarget = null; lockT = 0; }
   if (!curTarget && opts.lockMode === 'auto') { curTarget = pickTarget(); lockT = 0; }
+  // auto mode: while nothing is being locked, hop to a clearly better target in front of the nose
+  else if (curTarget && opts.lockMode === 'auto' && lockT <= 0 && (retargetT -= dt) <= 0) { retargetT = .8; const b = pickTarget(); if (b && b !== curTarget && targetScore(b) < targetScore(curTarget) * .7) curTarget = b; }
   locked = false;
   if (curTarget && player.alive) {
     _v1.subVectors(curTarget.pos, player.pos); const d = _v1.length(), a = player.fwd.angleTo(_v1);
@@ -1664,7 +1702,7 @@ function updateTargeting(dt) {
   }
   const P = player;
   P.spCd = Math.max(0, (P.spCd || 0) - dt);
-  if (P.wsel === 'sp' && ST.sp.multi && P.alive) {
+  if (ST.sp.multi && P.alive) {
     P.mlocks = P.mlocks.filter(t => t.alive && t.pos.distanceTo(P.pos) < ST.sp.range * 1.1 && P.fwd.angleTo(_v1.subVectors(t.pos, P.pos)) < ST.sp.cone * 1.4);
     P.mlT = (P.mlT || 0) - dt;
     if (P.mlocks.length < ST.sp.multi && P.mlT <= 0) {
@@ -1951,7 +1989,7 @@ function drawHUD() {
     if (tti < 30) { c.fillStyle = HUDC; c.textBaseline = 'top'; c.fillText('MSL ' + tti.toFixed(1), sp.x + half + 5 * s, sp.y + half + 11 * s); }
     const pct = t.puppet ? t.hpPct : t.remote ? t.hp : (t.boss || t.pod || t.ace || mode === 'multi') && t.maxHp ? t.hp / t.maxHp * 100 : -1;
     if (pct >= 0) { const bw = half * 2; c.globalAlpha = .35; c.fillRect(sp.x - half, sp.y + half + 4 * s, bw, 3 * s); c.globalAlpha = 1; c.fillRect(sp.x - half, sp.y + half + 4 * s, bw * clamp(pct / 100, 0, 1), 3 * s); }
-    if (P.wsel === 'sp' && P.mlocks.includes(t)) { const r = half + 9 * s; c.strokeStyle = WARN; c.lineWidth = 2 * s; c.beginPath(); c.moveTo(sp.x, sp.y - r); c.lineTo(sp.x + r, sp.y); c.lineTo(sp.x, sp.y + r); c.lineTo(sp.x - r, sp.y); c.closePath(); c.stroke(); c.strokeStyle = col; }
+    if (ST.sp.multi && P.mlocks.includes(t)) { const r = half + 9 * s; c.strokeStyle = WARN; c.lineWidth = 2 * s; c.beginPath(); c.moveTo(sp.x, sp.y - r); c.lineTo(sp.x + r, sp.y); c.lineTo(sp.x, sp.y + r); c.lineTo(sp.x - r, sp.y); c.closePath(); c.stroke(); c.strokeStyle = col; }
   }
   if (mode === 'multi') for (const o of remotes.values()) { if (!o.alive || !isAlly(o)) continue; toScreen(o.pos, sp); if (sp.behind || sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H) continue;
     c.fillStyle = c.strokeStyle = '#7fd6ff'; c.lineWidth = 1.6 * s; c.beginPath(); c.moveTo(sp.x, sp.y - 10 * s); c.lineTo(sp.x + 9 * s, sp.y + 6 * s); c.lineTo(sp.x - 9 * s, sp.y + 6 * s); c.closePath(); c.stroke();
@@ -2105,7 +2143,7 @@ function drawHUD() {
   const wx = cockpit && mfd ? mfd.rx + mfd.mw - 6 : W - pad, wy = cockpit && mfd ? mfd.my + mfd.mw * .76 : H - pad - (isTouch ? 170 * s + 60 : 0);
   c.textAlign = 'right'; c.textBaseline = 'bottom'; font(15);
   const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN],
-    [(P.wsel === 'sp' ? '▶' : '  ') + ST.sp.n + ' ' + (ST.sp.kind === 'laser' ? Math.ceil(P.sp) + 's' : P.sp) + (P.spCd > 0 ? ' ·' : ''), P.wsel === 'sp' ? AMBER : HUDD], [(P.wsel === 'msl' ? '▶' : '  ') + `MSL ${P.msl}`, P.msl ? (P.wsel === 'msl' ? HUDC : HUDD) : WARN],
+    ['[G] ' + ST.sp.n + ' ' + (ST.sp.kind === 'laser' ? Math.ceil(P.sp) + 's' : P.sp) + (P.spCd > 0 ? ' ·' : ''), P.sp > 0 ? (laser.on ? WARN : AMBER) : WARN], [`[F] MSL ${P.msl}`, P.msl ? HUDC : WARN],
     [(curTarget && curTarget.kind === 'ground' ? 'AGM' : 'AAM') + (opts.lockMode === 'manual' ? ' · LOCK MAN' : ' · LOCK AUTO'), HUDD]];
   lines.forEach(([t, col], i) => { c.fillStyle = col; c.fillText(t, wx, wy - i * 21 * s); });
   // pylon status (4 stations)
@@ -3060,7 +3098,7 @@ function frame(t) {
 }
 
 /* ================= screens ================= */
-function pauseGame() { if (state !== 'play') return; state = 'paused'; $('#pause').hidden = false; $('#pauseTime').textContent = mode === 'multi' ? '対戦中は止まりません' : fmtTime(timeLeft); if (SND.ctx && mode !== 'multi') SND.ctx.suspend(); $('#resumeBtn').focus(); }
+function pauseGame() { if (state !== 'play' || window.__skyNoPause) return; state = 'paused'; $('#pause').hidden = false; $('#pauseTime').textContent = mode === 'multi' ? '対戦中は止まりません' : fmtTime(timeLeft); if (SND.ctx && mode !== 'multi') SND.ctx.suspend(); $('#resumeBtn').focus(); }
 function resumeGame() { if (state !== 'paused') return; post.first = true; state = 'play'; $('#pause').hidden = true; if (SND.ctx) SND.ctx.resume(); last = performance.now(); }
 function showResult() {
   setGuide(false, true);
@@ -3116,7 +3154,7 @@ function resize() {
   resizePost();
 }
 addEventListener('resize', resize);
-addEventListener('pointerup', () => { touch.fire = false; }); addEventListener('pointercancel', () => { touch.fire = false; });
+addEventListener('pointerup', () => { touch.sp = false; }); addEventListener('pointercancel', () => { touch.sp = false; });
 // keep the waiting room alive while the tab is in the background (rAF stops there)
 setInterval(() => { if (document.hidden && state === 'mlobby') { netUpdate(.25); updateMroomUI(); } }, 250);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
@@ -3129,7 +3167,7 @@ player.pos.set(0, 3000, 14500);
 resize();
 updateLoadoutSummary();
 // test hook, local dev server only
-if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { NET, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: c => spawnBoss(c), damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { NET, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: c => spawnBoss(c), get cur() { return curTarget; }, get locked() { return locked; }, damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
 requestAnimationFrame(frame);
 })();
 </script>
