@@ -612,6 +612,7 @@ function buildTerrain() {
   g.putImageData(img, 0, 0);
 }
 
+const CLOUDS = [];
 function buildClouds() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
   for (let i = 0; i < 26; i++) { const r = rand(14, 30), lim = 60 - r, x = 64 + rand(-lim, lim), y = 64 + rand(-lim * .6, lim * .6);
@@ -624,7 +625,7 @@ function buildClouds() {
     for (let i = 0; i < n; i++) {
       const lowPart = i < n * 0.35; const s = new THREE.Sprite(mats[lowPart ? 2 : (Math.random() < .5 ? 0 : 1)]);
       s.position.set(cx + rand(-700, 700), cy + (lowPart ? rand(-160, -40) : rand(-60, 220)), cz + rand(-700, 700));
-      const sc = rand(800, 1700); s.scale.set(sc, sc * .62, 1); scene.add(s);
+      const sc = rand(800, 1700); s.scale.set(sc, sc * .62, 1); scene.add(s); CLOUDS.push(s);
     }
   }
 }
@@ -1216,7 +1217,7 @@ function renderFrame(dt) {
     quad.material = post.blur; renderer.setRenderTarget(post.rtB); renderer.render(quadScene, quadCam); src = post.rtB;
   }
   renderer.setRenderTarget(src); renderCockpit();
-  post.bloom.render(renderer, null, src, dt, false);
+  if (quality !== 'low') post.bloom.render(renderer, null, src, dt, false);
   const F = post.final.uniforms;
   F.tColor.value = src.texture; F.tDepth.value = post.rtA.depthTexture; F.aspect.value = W / H;
   toScreen(_v1.copy(camera.position).addScaledVector(sunDir, 20000), sunSP);
@@ -1592,7 +1593,7 @@ function surfaceFx(pos, vel, speed, dt, k0 = 1, mine = false) {
   const k = agl > lim || speed < 50 ? 0 : Math.pow(1 - Math.max(agl, 0) / lim, 1.4) * clamp(speed / 250, .4, 1.4) * k0;
   if (mine) { WAKE.k = sea ? k : 0; WAKE.x = pos.x; WAKE.z = pos.z; WAKE.agl = agl; if (k > .35) shake = Math.max(shake, (k - .35) * .35); }
   if (k <= 0) return;
-  const inv = 1 / speed, fx_ = vel.x * inv, fz_ = vel.z * inv, q = quality === 'low' ? .5 : 1, R = 4 + Math.max(agl, 0) * .5;
+  const inv = 1 / speed, fx_ = vel.x * inv, fz_ = vel.z * inv, q = quality === 'low' ? .35 : 1, R = 4 + Math.max(agl, 0) * .5;
   const at = (back, side) => { _v5.set(pos.x - fx_ * back - fz_ * side, floor, pos.z - fz_ * back + fx_ * side); return _v5; };
   if (sea) {
     // downwash mist: blown outward in a ring under the jet
@@ -3734,9 +3735,9 @@ $('#quitBtn').addEventListener('click', () => { if (SND.ctx) SND.ctx.resume(); t
 $('#retryBtn').addEventListener('click', () => startMission());
 $('#menuBtn').addEventListener('click', toTitle);
 try { const s = JSON.parse(localStorage.getItem('skylance-opts') || '{}'); if (s.invert) $('#optInvert').checked = true; if (s.quality) $('#optQuality').value = s.quality; if (s.fps) $('#optFps').checked = true; if (s.blur === false) $('#optBlur').checked = false; if (s.beginner) $('#optBeginner').checked = true; if (s.lock) $('#optLock').value = s.lock; if (s.guide) $('#optGuide').checked = true; if (s.callsign) $('#callsign').value = s.callsign; } catch (e) {}
-const pixelRatioFor = q => q === 'low' ? Math.min(devicePixelRatio || 1, 1) * .8 : Math.min(devicePixelRatio || 1, 1.5);
+const pixelRatioFor = q => q === 'low' ? Math.min(devicePixelRatio || 1, 1) * .7 : Math.min(devicePixelRatio || 1, 1.5);
 function applyQuality(q) {
-  quality = q; LOWQ.value = q === 'low' ? 1 : 0; sun.castShadow = q !== 'low'; renderer.setPixelRatio(pixelRatioFor(q)); resize(); post.first = true;
+  quality = q; LOWQ.value = q === 'low' ? 1 : 0; CLOUDS.forEach((c, i) => { c.visible = q !== 'low' || i % 3 === 0; }); sun.castShadow = q !== 'low'; renderer.setPixelRatio(pixelRatioFor(q)); resize(); post.first = true;
   const qb = $('#qualityBtn'); if (qb) qb.textContent = '描画モード：' + (q === 'low' ? 'FPS重視' : 'グラフィック重視');
   if ($('#optQuality').value !== q) $('#optQuality').value = q;
   try { localStorage.setItem('skylance-opts', JSON.stringify({ invert: $('#optInvert').checked, quality: q, fps: $('#optFps').checked, blur: $('#optBlur').checked, beginner: $('#optBeginner').checked, lock: $('#optLock').value, guide: $('#optGuide').checked, callsign: $('#callsign').value })); } catch (e) {}
@@ -3757,6 +3758,7 @@ quality = (() => { try { return JSON.parse(localStorage.getItem('skylance-opts')
 renderer.setPixelRatio(pixelRatioFor(quality)); sun.castShadow = quality !== 'low'; LOWQ.value = quality === 'low' ? 1 : 0;
 setupWorld();
 setupPost();
+applyQuality(quality);
 try { $('#fpsMeter').hidden = !$('#optFps').checked; const qb = $('#qualityBtn'); if (qb) qb.textContent = '描画モード：' + (quality === 'low' ? 'FPS重視' : 'グラフィック重視'); } catch (e) {}
 player.pos.set(0, 3000, 14500);
 resize();
