@@ -1827,7 +1827,7 @@ const _qT = new Q4();
 // launchVel: the carrier's actual velocity. eject>0 = ejector rack push (inner pylons); rail stations slide off and light at once
 function launchMissile(pylonMesh, startPos, dir, speed, target, owner, upVec, dropT, launchVel, eject = 0) {
   const mesh = makeMissileMesh();
-  const exh = new THREE.Sprite(owner === 'player' ? exhMat : exhMatEnemy);
+  const exh = new THREE.Sprite(owner === 'enemy' ? exhMatEnemy : exhMat);
   exh.position.z = 2.0; exh.scale.setScalar(3.4); exh.visible = false; mesh.add(exh);
   const pos = startPos.clone();
   if (pylonMesh) { pylonMesh.getWorldPosition(pos); pylonMesh.visible = false; }
@@ -2205,7 +2205,7 @@ function updateGround(g, dt) {
   if (g.wreck) { g.smokeT -= dt; if (g.smokeT <= 0) { g.smokeT = .14; smoke.emit(g.pos.x + rand(-6, 6), g.pos.y, g.pos.z + rand(-6, 6), rand(-2, 2), rand(14, 22), rand(-2, 2), 7, 14, 85, .14, .13, .12, .5, .5, .52, .7, .12);
     if (Math.random() < .5) fire.emit(g.pos.x + rand(-8, 8), g.pos.y - 3, g.pos.z + rand(-8, 8), 0, rand(6, 12), 0, .7, 8, 4, 1, .6, .2, .8, .2, 0, .9, 0); } return; }
   if (!g.alive) return;
-  if (g.ship) shipStep(g, dt);
+  if (g.ship) { shipStep(g, dt); shipGuns(g, dt); }
   if (g.type === 'RADAR' && g.mesh.userData.dish) g.mesh.userData.dish.rotation.y += dt * 1.6;
   if ((g.type === 'SAM' || g.aa) && player.alive) {
     g.cd -= dt; const d = g.pos.distanceTo(player.pos);
@@ -3751,7 +3751,7 @@ function campSpot(o = {}) {
 }
 // ---- meshes ----
 function makeShipMesh(kind) {
-  const g = new THREE.Group(), L = kind === 'BB' ? 120 : kind === 'LST' ? 70 : 64, B = kind === 'BB' ? 18 : kind === 'LST' ? 15 : 9;
+  const g = new THREE.Group(), L = kind === 'BB' ? 150 : kind === 'CG' ? 90 : kind === 'LST' ? 74 : 64, B = kind === 'BB' ? 22 : kind === 'CG' ? 12 : kind === 'LST' ? 15 : 9;
   const hullM = new THREE.MeshStandardMaterial({ color: kind === 'LST' ? 0x5a6066 : 0x6a7178, roughness: .6, metalness: .3 }), deckM = new THREE.MeshStandardMaterial({ color: 0x3e4247, roughness: .8 });
   const red = new THREE.MeshStandardMaterial({ color: 0x5a2420, roughness: .8 });
   const sh = new THREE.Shape(); sh.moveTo(-B / 2, L / 2); sh.lineTo(B / 2, L / 2); sh.lineTo(B / 2, -L * .22); sh.quadraticCurveTo(B / 2, -L * .42, 0, -L / 2); sh.quadraticCurveTo(-B / 2, -L * .42, -B / 2, -L * .22); sh.closePath();
@@ -3763,7 +3763,7 @@ function makeShipMesh(kind) {
   else {
     box(B * .5, kind === 'BB' ? 12 : 7, L * .18, 0, kind === 'BB' ? 11 : 8.5, L * .05); box(B * .3, kind === 'BB' ? 10 : 6, 4, 0, kind === 'BB' ? 21 : 14, L * .05);
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(.25, .35, kind === 'BB' ? 18 : 12, 6), deckM); mast.position.set(0, kind === 'BB' ? 30 : 20, L * .05); g.add(mast);
-    const turrets = kind === 'BB' ? [-.3, -.17, .3] : [-.3, .3];
+    const turrets = kind === 'BB' ? [-.32, -.2, .3] : kind === 'CG' ? [-.3, -.18, .28] : [-.3, .3];
     for (const t of turrets) { const tr = new THREE.Mesh(new THREE.CylinderGeometry(B * .22, B * .25, 3, 12), hullM); tr.position.set(0, 7.5, L * t); g.add(tr);
       const brl = new THREE.Mesh(new THREE.BoxGeometry(.8, .8, B * .6), deckM); brl.position.set(0, 8, L * t + (t < 0 ? -B * .35 : B * .35)); g.add(brl); }
     box(B * .2, 6, B * .2, 0, 13, L * .2, deckM);
@@ -3788,15 +3788,54 @@ function makeBaseMesh() {
   return g;
 }
 const allyLook = tail => ({ body: 0x7f8c99, dark: 0x4d5865, tail, shape: 'delta' });
+// Tomahawk-style cruise missile: long body, pop-out wings, tail cross, belly intake, bright motor
+const cruiseGeo = (() => { const rx = g => { g.rotateX(-Math.PI / 2); return g; };
+  return mergeParts([{ geo: rx(new THREE.CylinderGeometry(.52, .52, 5.6, 12)), color: 0x5d6168 }, { geo: rx(new THREE.ConeGeometry(.52, 1.1, 12)).translate(0, 0, -3.35), color: 0x3a3d42 },
+    { geo: new THREE.BoxGeometry(5.2, .07, .7).translate(0, 0, -.2), color: 0x4c5056 }, { geo: new THREE.BoxGeometry(.06, 1.5, .55).translate(0, .55, 2.5), color: 0x4c5056 },
+    { geo: new THREE.BoxGeometry(1.8, .06, .5).translate(0, 0, 2.5), color: 0x4c5056 }, { geo: new THREE.BoxGeometry(.6, .4, 1.4).translate(0, -.55, 1.4), color: 0x2a2c30 },
+    { geo: rx(new THREE.CylinderGeometry(.53, .53, .5, 12)).translate(0, 0, -1.6), color: 0xc4a020 }]); })();
+const cruiseMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: .4, roughness: .45 });
+function makeCruiseMesh() { const m = new THREE.Mesh(cruiseGeo, cruiseMat); m.scale.setScalar(2.4);
+  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(6, 3, 1.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); fl.position.z = 3.3; fl.scale.setScalar(4); m.add(fl); return m; }
+// tracer rounds from ships and AA guns
+const TRC = { list: [], mesh: null, max: 420 };
+function tracerSetup() { if (TRC.mesh) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRC.max * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRC.max * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  TRC.mesh = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); TRC.mesh.frustumCulled = false; scene.add(TRC.mesh); }
+function tracer(from, dir, speed, hostile, col) { tracerSetup(); if (TRC.list.length >= TRC.max) TRC.list.shift(); TRC.list.push({ p: from.clone(), prev: from.clone(), v: dir.clone().multiplyScalar(speed), life: 2.2, hostile, col }); }
+function chipPlayer(amt, why) { if (!player.alive || immune()) return; player.hp -= amt; fx.red = Math.max(fx.red, .45); shake = Math.max(shake, .35);
+  if (Math.random() < .25) showMsg('AAA HIT', WARN, .8); if (player.hp <= 0) { player.hp = 0; killPlayer(why); } }
+function tracerStep(dt) {
+  if (!TRC.mesh) return; const pa = TRC.mesh.geometry.attributes.position.array, ca = TRC.mesh.geometry.attributes.color.array; let n = 0;
+  for (let i = TRC.list.length - 1; i >= 0; i--) { const t = TRC.list[i]; t.life -= dt; t.prev.copy(t.p); t.v.y -= 9.8 * dt; t.p.addScaledVector(t.v, dt);
+    if (t.hostile && player.alive && segPointDist(t.prev, t.p, player.pos) < 9) { chipPlayer(opts.beginner ? 0 : 1.6, '対空砲火'); hitSpark(player.pos); t.life = 0; }
+    if (t.life <= 0 || t.p.y < 0) { TRC.list.splice(i, 1); continue; } }
+  for (const t of TRC.list) { if (n >= TRC.max) break; const o = n * 6; _v1.copy(t.v).normalize().multiplyScalar(-28);
+    pa[o] = t.p.x; pa[o + 1] = t.p.y; pa[o + 2] = t.p.z; pa[o + 3] = t.p.x + _v1.x; pa[o + 4] = t.p.y + _v1.y; pa[o + 5] = t.p.z + _v1.z;
+    const c = t.col; ca[o] = c[0]; ca[o + 1] = c[1]; ca[o + 2] = c[2]; ca[o + 3] = c[0] * .2; ca[o + 4] = c[1] * .2; ca[o + 5] = c[2] * .2; n++; }
+  TRC.mesh.geometry.setDrawRange(0, n * 2); TRC.mesh.geometry.attributes.position.needsUpdate = TRC.mesh.geometry.attributes.color.needsUpdate = true;
+}
+const TRC_RED = [5, 1.6, .5], TRC_GOLD = [5, 3.6, 1.2];
+// ships: close-in guns hose tracers at the player; big ships add flak bursts around them
+function shipGuns(g, dt) {
+  if (!player.alive || g.type === 'LST') return; const d = g.pos.distanceTo(player.pos); g.gunT = (g.gunT || 0) - dt; g.flakT = (g.flakT || rand(1, 3)) - dt;
+  if (d < 2800 && g.gunT <= 0) { g.gunT = g.type === 'BB' || g.type === 'CG' ? .05 : .08;
+    _v1.set(rand(-g.radius * .4, g.radius * .4), 12, rand(-g.radius * .6, g.radius * .6)).add(g.pos);
+    const tt = d / 900; _v2.copy(player.pos).addScaledVector(player.vel, tt).sub(_v1).normalize(); _v2.x += rand(-.035, .035); _v2.y += rand(-.03, .04); _v2.z += rand(-.035, .035); _v2.normalize();
+    tracer(_v1, _v2, 900, true, TRC_RED); }
+  if (d < 5200 && g.flakT <= 0 && (g.type === 'BB' || g.type === 'CG' || g.type === 'DD')) { g.flakT = g.type === 'BB' ? rand(.5, 1) : rand(1.2, 2.2);
+    _v3.copy(player.pos).addScaledVector(player.vel, rand(.3, 1)).add(_v4.set(rand(-90, 90), rand(-60, 80), rand(-90, 90))); flakBurst(_v3);
+    if (_v3.distanceTo(player.pos) < 40) chipPlayer(opts.beginner ? 0 : 6, '対空砲火'); }
+}
 // ---- spawning ----
 function campGround(type, x, z, h, o = {}) {
   const mesh = type === 'SAM' || type === 'AA' ? makeSAM(groundMat) : type === 'RADAR' ? makeRadar(groundMat) : type === 'TANK' ? makeTanks(groundMat) : type === 'HANGAR' ? makeHangarMesh() : makeShipMesh(type);
-  const ship = type === 'DD' || type === 'BB' || type === 'LST';
+  const ship = type === 'DD' || type === 'CG' || type === 'BB' || type === 'LST';
   if (!ship) mesh.scale.setScalar(type === 'HANGAR' ? 1 : 1.4);
   mesh.position.set(x, ship ? 0 : h - 1, z); mesh.rotation.y = o.rot != null ? o.rot : rand(0, 6.28); scene.add(mesh);
-  const hp = { SAM: 100, AA: 90, RADAR: 100, TANK: 100, HANGAR: 160, DD: 220, LST: 180, BB: 900 }[type];
-  const g = { kind: 'ground', type, label: { AA: 'AAA', DD: 'DDG', LST: 'LST', BB: 'BB' }[type] || type, mesh, pos: new V3(x, ship ? 8 : h + 6, z), vel: new V3(), alive: true, hp, maxHp: hp, radius: type === 'BB' ? 60 : ship ? 38 : 26,
-    score: { SAM: 800, AA: 700, RADAR: 600, TANK: 400, HANGAR: 900, DD: 1500, LST: 1200, BB: 6000 }[type], cd: rand(4, 9), smokeT: 0, wreck: false, ship, aa: ship && type !== 'LST' || type === 'AA' };
+  const hp = { SAM: 100, AA: 90, RADAR: 100, TANK: 100, HANGAR: 160, DD: 220, CG: 380, LST: 180, BB: 900 }[type];
+  const g = { kind: 'ground', type, label: { AA: 'AAA', DD: 'DDG', CG: 'CG', LST: 'LST', BB: 'BB' }[type] || type, mesh, pos: new V3(x, ship ? 8 : h + 6, z), vel: new V3(), alive: true, hp, maxHp: hp, radius: type === 'BB' ? 70 : type === 'CG' ? 46 : ship ? 38 : 26,
+    score: { SAM: 800, AA: 700, RADAR: 600, TANK: 400, HANGAR: 900, DD: 1500, CG: 2500, LST: 1200, BB: 6000 }[type], cd: rand(4, 9), smokeT: 0, wreck: false, ship, aa: type === 'AA' };
   if (type === 'AA') g.type = 'SAM';
   Object.assign(g, o); grounds.push(g); return g;
 }
@@ -3807,11 +3846,15 @@ function campAir(code, x, y, z, o = {}) {
   return e;
 }
 const jackalMesh = () => makeJet({ body: 0x23252b, dark: 0x111214, tail: 0x3f8f4a, shape: 'fsw', armor: 1, enemy: true });
-function squad(code, n, cx, cy, cz, spread = 1500, o = {}) { const out = []; for (let i = 0; i < n; i++) out.push(campAir(code, cx + rand(-spread, spread), cy + rand(-300, 300), cz + rand(-spread, spread), Object.assign({}, o))); return out; }
+function squad(code, n, cx, cy, cz, spread = 1500, o = {}) { // flights spawn as a finger-four / V toward the player, then break to fight
+  const out = [], dir = _v1.set(player.pos.x - cx, 0, player.pos.z - cz).normalize().clone(), side = new V3(-dir.z, 0, dir.x);
+  for (let i = 0; i < n; i++) { const k = Math.ceil(i / 2), sd = i % 2 ? 1 : -1, ox = side.x * sd * k * 140 - dir.x * k * 110 + rand(-spread, spread) * .05, oz = side.z * sd * k * 140 - dir.z * k * 110 + rand(-spread, spread) * .05;
+    const e = campAir(code, cx + ox, cy - k * 20, cz + oz, Object.assign({}, o)); e.dir.copy(dir); e.state = 'patrol'; e.home.set(cx, cy, cz); out.push(e); }
+  return out; }
 function cruiseMissile(x, z, target) {
-  const mesh = makeMissileMesh(); mesh.scale.setScalar(4.5); scene.add(mesh);
-  const e = { kind: 'air', cruise: true, target, label: 'CM', mesh, pos: new V3(x, rand(260, 420), z), vel: new V3(), dir: new V3(target.x - x, 0, target.z - z).normalize(), speed: rand(150, 175),
-    hp: 25, maxHp: 25, alive: true, dead: false, deadT: 0, score: 300, radius: 12, roll: 0, spin: 3, pyl: [9, 9, 9, 9], noEvade: true, trailT: 0, phase: rand(0, 6) };
+  const mesh = makeCruiseMesh(); scene.add(mesh);
+  const e = { kind: 'air', cruise: true, target, label: 'CRUISE', mesh, pos: new V3(x, rand(260, 420), z), vel: new V3(), dir: new V3(target.x - x, 0, target.z - z).normalize(), speed: rand(150, 175),
+    hp: 25, maxHp: 25, alive: true, dead: false, deadT: 0, score: 300, radius: 18, roll: 0, spin: 3, pyl: [9, 9, 9, 9], noEvade: true, trailT: 0, phase: rand(0, 6) };
   enemies.push(e); CAMP.f.cmSpawned = (CAMP.f.cmSpawned || 0) + 1; return e;
 }
 function campEscort(x, z, path, tail = 0x3a6ea5) {
@@ -3832,7 +3875,7 @@ function campAI(e, dt) {
     const gh = floorAt(e.pos.x + e.dir.x * 400, e.pos.z + e.dir.z * 400); e.pos.y += (Math.max(gh + 180, d < 900 ? T.y + 40 : 320) - e.pos.y) * Math.min(1, dt * .8);
     e.vel.copy(e.dir).multiplyScalar(e.speed); e.pos.addScaledVector(e.vel, dt);
     e.mesh.position.copy(e.pos); e.mesh.quaternion.setFromUnitVectors(NEG_Z, e.dir);
-    e.trailT -= dt; if (e.trailT <= 0) { e.trailT = .05; _v3.copy(e.pos).addScaledVector(e.dir, -7); smoke.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, 1.8, 1.4, 5, .95, .95, .96, .85, .85, .87, .45, 0); fire.emit(_v3.x, _v3.y, _v3.z, 0, 0, 0, .08, 2.2, 1, 1, .7, .4, 1, .4, .1, 1, 0); }
+    e.trailT -= dt; if (e.trailT <= 0) { e.trailT = .03; _v3.copy(e.pos).addScaledVector(e.dir, -9); smoke.emit(_v3.x, _v3.y, _v3.z, rand(-1, 1), rand(0, 1), rand(-1, 1), 4.5, 3, 16, .97, .97, .98, .82, .83, .86, .6, .3); fire.emit(_v3.x, _v3.y, _v3.z, -e.dir.x * 20, -e.dir.y * 20, -e.dir.z * 20, .12, 5, 2, 1, .8, .45, 1, .45, .12, 1, 0); }
     if (d < 140) { e.alive = false; e.removed = true; scene.remove(e.mesh); explode(e.pos, 1.4); if (CAMP.base) { CAMP.base.hp -= opts.beginner ? 5 : 9; showMsg('BASE HIT', WARN, 1.6, true); }
       if (radioCooldown <= 0) { radio('NIGHTJAR', pick(['基地に着弾！', '迎撃漏れだ！基地が被弾した！', 'ミサイルが抜けた！']), 2.6, true); radioCooldown = 4; } }
     return true;
@@ -3895,22 +3938,31 @@ const fmtObj = (n, of) => `${n}/${of}`;
 const CMISSIONS = [
   { id: 1, title: '夜明けの奇襲', en: 'Dawn Raid', map: 'capital', time: 480,
     story: '早朝、首都アウレアに空襲警報。ヴァルカ軍の巡航ミサイル群が北の海から接近中だ。生き残った機体は君とグリフォン隊長だけ。首都の空軍基地を守り抜け。',
-    facts: [['目的', '巡航ミサイル20発の迎撃と護衛戦闘機の撃墜'], ['敗北', '基地の耐久が0になる・撃墜される'], ['ヒント', 'ミサイルは遅い。機銃でも落とせる']],
+    facts: [['目的', '巡航ミサイル24発の迎撃と護衛戦闘機の撃墜'], ['敗北', '基地の耐久が0になる・撃墜される'], ['ヒント', 'ミサイルは遅い。機銃でも落とせる']],
     start() {
       const sp = campSpot({ x0: -3000, x1: 3000, z0: -1000, z1: 5000, hMin: 15, hMax: 250 });
       const mesh = makeBaseMesh(); mesh.position.set(sp[0], sp[2], sp[1]); scene.add(mesh); CAMP.extras.push(mesh);
       CAMP.base = { pos: new V3(sp[0], sp[2], sp[1]), x: sp[0], y: sp[2], z: sp[1], hp: 100 };
       player.pos.set(sp[0], 1600, sp[1] + 5000);
       campAlly('GRIFFON', 0xc9a227, sp[0] + 300, 1700, sp[1] + 5200);
-      const wave = (n, k) => after(k, () => { for (let i = 0; i < n; i++) cruiseMissile(rand(-9000, 9000), -16500 - i * 300, CAMP.base); radio('NIGHTJAR', `巡航ミサイル${n}発、北から接近！`, 3, true); });
-      wave(4, 4); wave(5, 34); after(46, () => { squad('F', 3, 0, 2500, -12000, 2500); radio('NIGHTJAR', '護衛の戦闘機がいる。邪魔させるな！', 3.5); }); wave(5, 70); wave(6, 105);
+      // salvos fly in formation: a staggered line abreast, rows 400 m apart
+      const wave = (n, k, cx) => after(k, () => { for (let i = 0; i < n; i++) { const row = i % 2, col = (i >> 1) - (n >> 2); cruiseMissile(cx + col * 260 + row * 130, -16800 - row * 400, CAMP.base).speed = 165; }
+        showMsg('MISSILE SALVO INBOUND', WARN, 2.5, true); radio('NIGHTJAR', `巡航ミサイル${n}発、編隊で北から接近！`, 3, true); });
+      wave(6, 4, -2500); wave(6, 34, 3000); after(46, () => { squad('F', 4, 0, 2500, -12000, 300); radio('NIGHTJAR', '護衛の戦闘機4機！邪魔させるな！', 3.5); }); wave(6, 70, -4000); wave(6, 100, 1500);
+      CAMP.aa = [[-260, -400], [260, -380], [-240, 420], [250, 400]].map(([dx, dz]) => new V3(sp[0] + dx, sp[2] + 8, sp[1] + dz)); CAMP.aaT = 0; CAMP.flkT = 1;
       radio('NIGHTJAR', 'こちらナイトジャー。首都上空の全機へ、巡航ミサイル多数が接近中！'); radio('GRIFFON', '新人、俺の後ろに…いや、お前の腕なら大丈夫だ。ミサイルを落とせ！', 4.5);
     },
-    tick() {
-      CAMP.obj = `巡航ミサイルを迎撃せよ  ${fmtObj(CAMP.f.cmKilled || 0, 20)}`;
+    tick(dt) {
+      // base air defence: lots of gold tracers and flak that mostly miss — it sells the raid but the job stays yours
+      const inbound = enemies.filter(e => e.alive && e.cruise && e.pos.distanceTo(CAMP.base.pos) < 6500);
+      CAMP.aaT -= dt; CAMP.flkT -= dt;
+      if (inbound.length && CAMP.aaT <= 0) { CAMP.aaT = .05; const t = pick(inbound), g = pick(CAMP.aa); _v2.copy(t.pos).add(_v4.set(rand(-90, 90), rand(-40, 120), rand(-90, 90))).sub(g).normalize(); tracer(g, _v2, 850, false, TRC_GOLD); }
+      if (inbound.length && CAMP.flkT <= 0) { CAMP.flkT = rand(.35, .8); const t = pick(inbound); flakBurst(_v3.copy(t.pos).addScaledVector(t.dir, rand(80, 260)).add(_v4.set(rand(-120, 120), rand(-60, 120), rand(-120, 120)))); }
+      if (CAMP.base.hp < 70 && Math.random() < dt * 6) smoke.emit(CAMP.base.x + rand(-200, 200), CAMP.base.y + 5, CAMP.base.z + rand(-500, 500), rand(-2, 2), rand(12, 20), rand(-2, 2), 7, 14, 80, .14, .13, .12, .5, .5, .52, .7, .12);
+      CAMP.obj = `巡航ミサイルを迎撃せよ  ${fmtObj(CAMP.f.cmKilled || 0, 24)}`;
       CAMP.status = [`BASE ${Math.max(0, Math.round(CAMP.base.hp))}%`, CAMP.base.hp < 35];
       if (CAMP.base.hp <= 0) return campEnd(false, '首都基地が破壊された');
-      if ((CAMP.f.cmSpawned || 0) >= 20 && !enemies.some(e => e.alive && !e.pod)) return campEnd(true);
+      if ((CAMP.f.cmSpawned || 0) >= 24 && !enemies.some(e => e.alive && !e.pod)) return campEnd(true);
     },
     win: [['GRIFFON', 'よくやった、ケストレル。だが基地は…しばらく使えないな。'], ['NIGHTJAR', '全機、セレス群島の臨時滑走路へ移動せよ。']] },
   { id: 2, title: '残された翼', en: 'Remaining Wings', map: 'archi', time: 420,
@@ -3931,26 +3983,29 @@ const CMISSIONS = [
       if (missionTime > 5 && !enemies.some(e => e.alive && !e.pod)) return campEnd(true);
     },
     win: [['GRIFFON', '腕は確かだな、ケストレル。'], ['NIGHTJAR', '…最後の偵察機が妙な電文を送っていた。暗号が我々の軍用コードに似ている。気になるな。']] },
-  { id: 3, title: '灰色の艦隊', en: 'Grey Fleet', map: 'ocean', time: 600,
-    story: 'ヴァルカの上陸艦隊がグレイ海を南下中。輸送艦が防衛線を越えれば島は占領される。ホルスト提督からは「旗艦の戦艦を最優先で叩け」との命令が届いている。',
-    facts: [['目的', '駆逐艦4・輸送艦3・戦艦1の撃沈'], ['敗北', '輸送艦が2隻、防衛線（南）を越える'], ['ヒント', '提督の命令より輸送艦の足止めが大事かも…']],
+  { id: 3, title: '灰色の艦隊', en: 'Grey Fleet', map: 'ocean', time: 660,
+    story: 'ヴァルカの上陸艦隊がグレイ海を南下中。戦艦2隻を中心に巡洋艦・駆逐艦が輪形陣を組み、その中心に輸送艦を抱えている。輸送艦が防衛線を越えれば島は占領される。ホルスト提督からは「戦艦を最優先で叩け」との命令。',
+    facts: [['目的', '輸送艦6隻と戦艦2隻の撃沈（護衛艦はボーナス）'], ['敗北', '輸送艦が3隻、防衛線（南）を越える'], ['注意', '艦隊に近づくと機関砲と対空砲火の弾幕。低く速く突っ込め']],
     start() {
       player.pos.set(0, 2200, 14000);
-      const away = [];
-      for (let i = 0; i < 3; i++) { const g = campGround('LST', -4000 + i * 4000, -9500 - i * 400, 0, { rot: Math.PI }); g.vel.set(0, 0, 46); g.lineZ = 8500; }
-      for (let i = 0; i < 4; i++) { const g = campGround('DD', -6000 + i * 4000, -8000 + (i % 2) * 1500, 0); g.vel.set(0, 0, 30); }
-      const bb = campGround('BB', 0, -12000, 0); bb.vel.set(0, 0, 20); bb.label = 'BB VOLKOV';
-      squad('F', 4, 0, 2600, -6000, 3000);
-      after(90, () => { squad('I', 3, 0, 3000, -14000, 2000); radio('NIGHTJAR', '敵空母から迎撃機が上がった！', 3.5); });
-      radio('HOLST', 'ホルスト提督だ。旗艦ヴォルコフを最優先で沈めろ。輸送艦は後回しでいい。', 5); radio('GRIFFON', '…輸送艦を後回し？ 上陸されたら終わりだぞ。', 4);
+      const C = [0, -10000], V = 42, put = (type, dx, dz, label) => { const g = campGround(type, C[0] + dx, C[1] + dz, 0, { rot: Math.PI }); g.vel.set(0, 0, V); if (label) g.label = label; if (type === 'LST') g.lineZ = 8500; return g; };
+      put('BB', -420, 0, 'BB VOLKOV'); put('BB', 420, -350, 'BB GRAZNY');
+      for (const [dx, dz] of [[-1300, -150], [1300, -150], [0, -1200], [0, 1100]]) put('CG', dx, dz);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + .2; put('DD', Math.cos(a) * 2100, Math.sin(a) * 1900); }
+      for (let i = 0; i < 6; i++) put('LST', -750 + (i % 3) * 750, 500 + (i >> 1 >> 0) * 0 + Math.floor(i / 3) * 420);
+      squad('F', 4, 0, 1800, -8000, 0);
+      after(80, () => { squad('I', 4, 0, 3000, -15000, 0); radio('NIGHTJAR', '空母から迎撃機4機！', 3.5, true); });
+      after(200, () => { squad('F', 4, 0, 2500, -15000, 0); radio('NIGHTJAR', '敵の増援だ！ 艦隊上空を守る気だ！', 3.5, true); });
+      radio('HOLST', 'ホルスト提督だ。戦艦ヴォルコフとグラズニーを最優先で沈めろ。輸送艦は後回しでいい。', 5); radio('GRIFFON', '…輸送艦を後回し？ 上陸されたら終わりだぞ。', 4);
+      radio('NIGHTJAR', '艦隊の対空砲火は濃い。正面から突っ込めば蜂の巣だ。', 4);
     },
     tick() {
-      const ships = grounds.filter(g => g.alive && g.ship), lst = ships.filter(g => g.type === 'LST').length;
-      CAMP.obj = `艦隊を撃沈せよ  残り${ships.length}隻（輸送艦${lst}）`; CAMP.status = [`LANDED ${CAMP.f.landed || 0}/2`, (CAMP.f.landed || 0) > 0];
-      if ((CAMP.f.landed || 0) >= 2) return campEnd(false, '輸送艦の上陸を許した');
-      if (missionTime > 5 && !ships.length && !enemies.some(e => e.alive)) return campEnd(true);
+      const ships = grounds.filter(g => g.alive && g.ship), lst = ships.filter(g => g.type === 'LST').length, bb = ships.filter(g => g.type === 'BB').length;
+      CAMP.obj = `輸送艦 残り${lst}  ·  戦艦 残り${bb}  ·  艦艇 計${ships.length}`; CAMP.status = [`LANDED ${CAMP.f.landed || 0}/3`, (CAMP.f.landed || 0) > 0];
+      if ((CAMP.f.landed || 0) >= 3) return campEnd(false, '輸送艦の上陸を許した');
+      if (missionTime > 5 && !lst && !bb) { for (const g of ships) g.vel.set(0, 0, -30); return campEnd(true); }
     },
-    win: [['NIGHTJAR', '艦隊の全滅を確認。上陸は阻止された。'], ['GRIFFON', '提督の命令通りにしてたら危なかったな…。']] },
+    win: [['NIGHTJAR', '輸送艦と戦艦の撃沈を確認。残存艦は撤退していく。上陸は阻止された！'], ['GRIFFON', '提督の命令通り戦艦だけ狙ってたら、今頃島は取られてたな…。']] },
   { id: 4, title: '低空の槍', en: 'Lance Below', map: 'coast', time: 600,
     story: '反撃の第一歩として、ノルド岬に並ぶヴァルカの早期警戒レーダー網を潰す。高く飛べば見つかり、迎撃機が飛んでくる。海面すれすれ、波を蹴って進め。',
     facts: [['目的', 'レーダー基地5か所の破壊'], ['注意', 'レーダー付近で高度150m以上を飛ぶと探知される（探知されると増援）'], ['ヒント', '低く飛ぶと水しぶきが上がる。それが合図だ']],
@@ -4111,6 +4166,7 @@ function campTick(dt) {
   if (!missionResult) CAMP.m.tick(dt);
 }
 function campClear() {
+  TRC.list.length = 0; if (TRC.mesh) TRC.mesh.geometry.setDrawRange(0, 0);
   for (const e of CAMP.escorts) if (e.mesh) scene.remove(e.mesh); for (const a of CAMP.allies) scene.remove(a.mesh); for (const m of CAMP.extras) scene.remove(m);
   if (CAMP.ghost) scene.remove(CAMP.ghost.m);
   Object.assign(CAMP, { base: null, escorts: [], allies: [], extras: [], ghost: null, detect: 0, alarmT: 0, f: {}, obj: '', status: null });
@@ -4176,6 +4232,7 @@ function update(dt) {
   for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].removed) enemies.splice(i, 1);
   for (const g of grounds) updateGround(g, dt);
   if (CAMP.m && mode === 'mission') campTick(dt);
+  tracerStep(dt);
   for (const e of enemies) if (e.kind === 'air' && !e.dead && e.dir && e.pos.y < 70) surfaceFx(e.pos, _v4.copy(e.dir).multiplyScalar(e.speed || 200), e.speed || 200, dt, .7);
   updateMissiles(dt); updateBullets(dt); updateEffects(dt); for (const r of trails.tips) r.update(dt); for (const r of trails.con) r.update(dt); hitMarkT = Math.max(0, hitMarkT - dt);
   for (let i = decoys.length - 1; i >= 0; i--) { const d = decoys[i]; d.life -= dt; d.vel.y -= 9.8 * dt; d.vel.multiplyScalar(1 - .6 * dt); d.pos.addScaledVector(d.vel, dt);
