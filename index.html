@@ -236,7 +236,8 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
           <label for="optGuide"><input type="checkbox" id="optGuide"> 操作ガイドを常に表示</label>
           <label for="optBlur"><input type="checkbox" id="optBlur" checked> モーションブラー</label>
           <label for="optLock">ロックオン <select id="optLock"><option value="auto">自動</option><option value="manual">切り替え式（R/X）</option></select></label>
-          <label for="optQuality">画質 <select id="optQuality"><option value="high">高</option><option value="low">軽量</option></select></label>
+          <label for="optQuality">描画モード <select id="optQuality"><option value="high">グラフィック重視</option><option value="low">FPS重視</option></select></label>
+          <label for="optFps"><input type="checkbox" id="optFps"> FPSを表示</label>
         </div>
         <div class="keys desk-only">
           <div><kbd>W</kbd><kbd>S</kbd>ピッチ</div><div><kbd>A</kbd><kbd>D</kbd>ロール</div>
@@ -259,12 +260,15 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
     <h2><span>Paused</span><span id="pauseTime"></span></h2>
     <p class="verdict">一時停止中</p>
     <div class="stack"><button class="btn ghost sm" id="guideBtn">操作ガイドを表示（H）</button>
+    <button class="btn ghost sm" id="qualityBtn">描画モード：グラフィック重視</button>
     <div class="row">
       <button class="btn" id="resumeBtn">再開</button>
       <button class="btn ghost" id="quitBtn">リタイア</button>
     </div></div>
   </div>
 </section>
+
+<div id="fpsMeter" hidden style="position:fixed;top:6px;right:8px;z-index:50;font:12px 'Share Tech Mono',monospace;color:#8dffb4;background:rgba(0,10,8,.55);padding:2px 7px;border-radius:4px;pointer-events:none">-- FPS</div>
 
 <section id="result" class="screen" hidden>
   <div class="panel result">
@@ -410,6 +414,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: !POST_OK
 const MAX_POINT = (() => { const gl = renderer.getContext(); const r = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE); return r ? r[1] : 256; })();
 renderer.autoClear = true;
 let quality = 'high', blurOn = true;
+const LOWQ = { value: 0 }; // 1 in FPS mode: shaders skip their expensive layers
 const scene = new THREE.Scene();
 const FOGC = new THREE.Color(0.73, 0.82, 0.89);
 scene.background = FOGC.clone();
@@ -457,9 +462,10 @@ function pfbm(x, y, p, o) { let s = 0, a = .5, n = 0; for (let i = 0; i < o; i++
 let terrain, water, minimap, DETAIL;
 const TERRAIN_VS_HEAD = `attribute vec2 sv; attribute float field; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;`;
 function terrainShader(sh) {
+  sh.uniforms.lowQ = LOWQ;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + TERRAIN_VS_HEAD)
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n vSv = sv; vField = field; vWp = (modelMatrix * vec4(transformed, 1.0)).xyz; vWn = normal;');
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;')
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float lowQ; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;')
     .replace('#include <map_fragment>', `
       float tDist = length(vWp - cameraPosition); vec2 P = vWp.xz;
       float d2 = texture2D(map, P / 420.0).r, d3 = texture2D(map, P / 1800.0).r, d4 = texture2D(map, P / 6000.0).g;
@@ -479,7 +485,7 @@ function terrainShader(sh) {
         diffuseColor.rgb = mix(diffuseColor.rgb, fc, vField);
       }`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      {
+      if (lowQ < 0.5) {
         float e2 = texture2D(map, (P + vec2(18.0, 0.0)) / 420.0).r, e3 = texture2D(map, (P + vec2(0.0, 18.0)) / 420.0).r;
         vec2 g = vec2(e2 - d2, e3 - d2) * (0.8 + rockK * 1.6);
         vec3 wn = normalize(vWn + vec3(-g.x, 0.0, -g.y) * (1.0 - smoothstep(2000.0, 8000.0, tDist)));
@@ -540,15 +546,15 @@ function buildTerrain() {
   water = new THREE.Mesh(new THREE.PlaneGeometry(220000, 220000), new THREE.ShaderMaterial({
     uniforms: { nmap: { value: ntex }, fmap: { value: DETAIL }, dmap: { value: dtex }, time: { value: 0 }, sunDir: { value: sunDir }, hor: { value: FOGC },
       fogColor: { value: FOGC }, fogDensity: { value: 0.000036 }, halfT: { value: HALF }, tsize: { value: T_SIZE },
-      skim: { value: new THREE.Vector4() }, wk: { value: WAKE.pts }, wkOn: { value: 0 } },
+      skim: { value: new THREE.Vector4() }, wk: { value: WAKE.pts }, wkOn: { value: 0 }, lowQ: LOWQ },
     vertexShader: `varying vec3 vWp; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vWp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `uniform sampler2D nmap; uniform sampler2D fmap; uniform sampler2D dmap; uniform float time; uniform vec3 sunDir; uniform vec3 hor; uniform vec3 fogColor; uniform float fogDensity; uniform float halfT; uniform float tsize;
-      uniform vec4 skim; uniform vec4 wk[16]; uniform float wkOn;
+      uniform vec4 skim; uniform vec4 wk[16]; uniform float wkOn; uniform float lowQ;
       varying vec3 vWp;
       vec2 nrm(vec2 uv){ return texture2D(nmap, uv).xy * 2.0 - 1.0; }
       void main(){
         vec3 toC = cameraPosition - vWp; float dist = length(toC); vec3 V = toC / dist; vec2 P = vWp.xz;
-        float f1 = exp(-dist / 9000.0), f2 = exp(-dist / 2400.0), f3 = exp(-dist / 500.0);
+        float f1 = exp(-dist / 9000.0), f2 = exp(-dist / 2400.0), f3 = lowQ > 0.5 ? 0.0 : exp(-dist / 500.0);
         vec2 wd = vec2(0.8, 0.6), wp = vec2(-0.6, 0.8);
         vec2 Q = vec2(dot(P, wd) * 0.45, dot(P, wp) * 1.4); // swell stretched across the wind
         vec2 a = nrm(Q / 380.0 + time * vec2(.012, .0)), b = nrm(Q / 140.0 + vec2(.37, .11) + time * vec2(.026, .004));
@@ -557,7 +563,7 @@ function buildTerrain() {
                + nrm(P / 96.0 + time * vec2(.0085, .0062)) * 0.45 * f2 + nrm(P / 21.0 + time * vec2(-.022, .017)) * 0.4 * f3;
         // wake left by the player's downwash, and ripples blown out under the jet
         float wake = 0.0, ring = 0.0;
-        if (wkOn > 0.5 && length(P - wk[0].xy) < 1800.0) {
+        if (wkOn > 0.5 && lowQ < 0.5 && length(P - wk[0].xy) < 1800.0) {
           for (int i = 0; i < 15; i++) { vec4 A = wk[i], B = wk[i + 1]; if (A.w <= 0.0 || B.w <= 0.0 || length(B.xy - A.xy) > 160.0) continue;
             vec2 ab = B.xy - A.xy; float t = clamp(dot(P - A.xy, ab) / max(dot(ab, ab), 1.0), 0.0, 1.0);
             float age = mix(A.z, B.z, t), str = mix(A.w, B.w, t), d = length(P - A.xy - ab * t), w = 4.0 + age * 7.0;
@@ -1191,7 +1197,7 @@ function setupPost() {
 }
 function resizePost() {
   if (!post.on) return; const s = renderer.getDrawingBufferSize(new THREE.Vector2());
-  post.rtA.setSize(s.x, s.y); post.rtB.setSize(s.x, s.y); post.bloom.setSize(s.x, s.y); post.final.uniforms.res.value.copy(s);
+  post.rtA.setSize(s.x, s.y); post.rtB.setSize(s.x, s.y); const bs = quality === 'low' ? .5 : 1; post.bloom.setSize(Math.round(s.x * bs), Math.round(s.y * bs)); post.final.uniforms.res.value.copy(s);
 }
 const sunSP = { x: 0, y: 0, behind: true };
 function renderFrame(dt) {
@@ -3629,8 +3635,10 @@ function update(dt) {
   return inp;
 }
 const _tmpSize = new THREE.Vector2();
+const fpsM = { n: 0, t: 0 };
 function frame(t) {
   requestAnimationFrame(frame);
+  fpsM.n++; fpsM.t += (t - last) / 1000; if (fpsM.t >= .5) { const el = $('#fpsMeter'); if (!el.hidden) el.textContent = Math.round(fpsM.n / fpsM.t) + ' FPS · ' + (quality === 'low' ? 'FPS重視' : 'グラフィック重視'); fpsM.n = 0; fpsM.t = 0; }
   const rdt = Math.min((t - last) / 1000, 1 / 20); last = t;
   if (mode === 'multi') { timeScale = 1; slowmoT = 0; }
   if (slowmoT > 0) { slowmoT -= rdt; if (slowmoT <= 0) timeScale = 1; }
@@ -3678,7 +3686,7 @@ function toTitle() {
   player.mesh.userData.pylons.forEach(p => p.visible = true);
   if (SND.ctx) { SND.ctx.resume(); ['engG', 'roarG', 'windG', 'lockG', 'alertG', 'warnG', 'gunG'].forEach(k => SND[k].gain.value = 0); }
 }
-function readOpts() { invert = $('#optInvert').checked; blurOn = $('#optBlur').checked; opts.beginner = $('#optBeginner').checked; opts.lockMode = $('#optLock').value; opts.guide = $('#optGuide').checked; applyQuality($('#optQuality').value); }
+function readOpts() { invert = $('#optInvert').checked; blurOn = $('#optBlur').checked; opts.beginner = $('#optBeginner').checked; opts.lockMode = $('#optLock').value; opts.guide = $('#optGuide').checked; $('#fpsMeter').hidden = !$('#optFps').checked; applyQuality($('#optQuality').value); }
 // ---- main menu: hover/focus shows the matching detail sheet; arrow keys move between items
 const menuItems = [...document.querySelectorAll('#title .mi')];
 function menuShow(id) {
@@ -3719,13 +3727,19 @@ document.querySelectorAll('#mrModeRow [data-mode]').forEach(b => b.addEventListe
 document.querySelectorAll('#mrDiffRow [data-diff]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.diff = b.dataset.diff; updateMroomUI(true); }));
 $('#mrLeave').addEventListener('click', toTitle);
 $('#resumeBtn').addEventListener('click', resumeGame);
+$('#optQuality').addEventListener('change', () => applyQuality($('#optQuality').value));
+$('#qualityBtn').addEventListener('click', () => applyQuality(quality === 'low' ? 'high' : 'low'));
+$('#optFps').addEventListener('change', () => { $('#fpsMeter').hidden = !$('#optFps').checked; applyQuality(quality); });
 $('#quitBtn').addEventListener('click', () => { if (SND.ctx) SND.ctx.resume(); toTitle(); });
 $('#retryBtn').addEventListener('click', () => startMission());
 $('#menuBtn').addEventListener('click', toTitle);
-try { const s = JSON.parse(localStorage.getItem('skylance-opts') || '{}'); if (s.invert) $('#optInvert').checked = true; if (s.quality) $('#optQuality').value = s.quality; if (s.blur === false) $('#optBlur').checked = false; if (s.beginner) $('#optBeginner').checked = true; if (s.lock) $('#optLock').value = s.lock; if (s.guide) $('#optGuide').checked = true; if (s.callsign) $('#callsign').value = s.callsign; } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem('skylance-opts') || '{}'); if (s.invert) $('#optInvert').checked = true; if (s.quality) $('#optQuality').value = s.quality; if (s.fps) $('#optFps').checked = true; if (s.blur === false) $('#optBlur').checked = false; if (s.beginner) $('#optBeginner').checked = true; if (s.lock) $('#optLock').value = s.lock; if (s.guide) $('#optGuide').checked = true; if (s.callsign) $('#callsign').value = s.callsign; } catch (e) {}
+const pixelRatioFor = q => q === 'low' ? Math.min(devicePixelRatio || 1, 1) * .8 : Math.min(devicePixelRatio || 1, 1.5);
 function applyQuality(q) {
-  quality = q; sun.castShadow = q !== 'low'; renderer.setPixelRatio(q === 'low' ? 1 : Math.min(devicePixelRatio, 1.5)); resize();
-  try { localStorage.setItem('skylance-opts', JSON.stringify({ invert: $('#optInvert').checked, quality: q, blur: $('#optBlur').checked, beginner: $('#optBeginner').checked, lock: $('#optLock').value, guide: $('#optGuide').checked, callsign: $('#callsign').value })); } catch (e) {}
+  quality = q; LOWQ.value = q === 'low' ? 1 : 0; sun.castShadow = q !== 'low'; renderer.setPixelRatio(pixelRatioFor(q)); resize(); post.first = true;
+  const qb = $('#qualityBtn'); if (qb) qb.textContent = '描画モード：' + (q === 'low' ? 'FPS重視' : 'グラフィック重視');
+  if ($('#optQuality').value !== q) $('#optQuality').value = q;
+  try { localStorage.setItem('skylance-opts', JSON.stringify({ invert: $('#optInvert').checked, quality: q, fps: $('#optFps').checked, blur: $('#optBlur').checked, beginner: $('#optBeginner').checked, lock: $('#optLock').value, guide: $('#optGuide').checked, callsign: $('#callsign').value })); } catch (e) {}
 }
 function resize() {
   W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2);
@@ -3740,9 +3754,10 @@ setInterval(() => { if (document.hidden && state === 'mlobby') { netUpdate(.25);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
 quality = (() => { try { return JSON.parse(localStorage.getItem('skylance-opts') || '{}').quality || 'high'; } catch (e) { return 'high'; } })();
-renderer.setPixelRatio(quality === 'low' ? 1 : Math.min(devicePixelRatio, 1.5)); sun.castShadow = quality !== 'low';
+renderer.setPixelRatio(pixelRatioFor(quality)); sun.castShadow = quality !== 'low'; LOWQ.value = quality === 'low' ? 1 : 0;
 setupWorld();
 setupPost();
+try { $('#fpsMeter').hidden = !$('#optFps').checked; const qb = $('#qualityBtn'); if (qb) qb.textContent = '描画モード：' + (quality === 'low' ? 'FPS重視' : 'グラフィック重視'); } catch (e) {}
 player.pos.set(0, 3000, 14500);
 resize();
 updateLoadoutSummary(); menuFocus();
