@@ -468,7 +468,8 @@ function terrainShader(sh) {
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float lowQ; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;')
     .replace('#include <map_fragment>', `
       float tDist = length(vWp - cameraPosition); vec2 P = vWp.xz;
-      float d2 = texture2D(map, P / 420.0).r, d3 = texture2D(map, P / 1800.0).r, d4 = texture2D(map, P / 6000.0).g;
+      float d2 = 0.5, d3 = 0.5, d4 = 0.5;
+      if (lowQ < 0.5) { d2 = texture2D(map, P / 420.0).r; d3 = texture2D(map, P / 1800.0).r; d4 = texture2D(map, P / 6000.0).g; }
       float slope = 1.0 - vWn.y, rockK = smoothstep(0.22, 0.45, slope);
       float strata = 0.5 + 0.5 * sin(vWp.y / 26.0 + d3 * 6.0); // broad, smooth rock banding
       float k = (0.88 + 0.24 * d2) * (0.84 + 0.32 * d3) * (0.86 + 0.28 * d4);
@@ -559,6 +560,7 @@ function buildTerrain() {
         vec2 Q = vec2(dot(P, wd) * 0.45, dot(P, wp) * 1.4); // swell stretched across the wind
         vec2 a = nrm(Q / 380.0 + time * vec2(.012, .0)), b = nrm(Q / 140.0 + vec2(.37, .11) + time * vec2(.026, .004));
         vec2 sw = (a * 0.7 + b * 0.5 * f1); sw = wd * sw.x + wp * sw.y;
+        if (lowQ > 0.5) { sw = a * 0.7; sw = wd * sw.x + wp * sw.y; }
         vec2 s = nrm(P / 1900.0 + time * vec2(.0010, .0006)) * 0.45 + sw * 0.8
                + nrm(P / 96.0 + time * vec2(.0085, .0062)) * 0.45 * f2 + nrm(P / 21.0 + time * vec2(-.022, .017)) * 0.4 * f3;
         // wake left by the player's downwash, and ripples blown out under the jet
@@ -586,7 +588,7 @@ function buildTerrain() {
         body += vec3(0.0, 0.07, 0.065) * crest * f2;
         body *= 0.5 + 0.7 * sunDir.y;
         vec3 col = mix(body, refl, fres) + spec * mix(0.3, 1.0, smoothstep(0.0, 0.05, depth));
-        float fz = texture2D(fmap, P / 38.0 + time * vec2(.006, -.004)).r, fz2 = texture2D(fmap, P / 9.0 - time * vec2(.01, .013)).g;
+        float fz = 0.5, fz2 = 0.5; if (lowQ < 0.5) { fz = texture2D(fmap, P / 38.0 + time * vec2(.006, -.004)).r; fz2 = texture2D(fmap, P / 9.0 - time * vec2(.01, .013)).g; }
         float shore = 1.0 - smoothstep(0.0, 0.05, depth);
         float band = 0.5 + 0.5 * sin(depth * 380.0 - time * 1.4 + fz * 6.0);
         float foam = shore * smoothstep(0.55, 0.85, fz * 0.55 + band * 0.55) * smoothstep(0.0, 0.004, depth);
@@ -802,7 +804,8 @@ function makeJet(o) {
   const enemy = !!o.enemy, skin = enemy ? SKIN.camo : SKIN.plain;
   const paint = (color, rough, metal) => Object.assign(new THREE.MeshPhysicalMaterial({ color, map: skin.map, normalMap: skin.nrm, normalScale: new THREE.Vector2(.45, .45), roughnessMap: skin.rough, roughness: rough, metalness: metal,
     clearcoat: enemy ? .2 : .35, clearcoatRoughness: enemy ? .3 : .14, envMapIntensity: .7, reflectivity: .35 }), { onBeforeCompile: capGlint });
-  const body = paint(o.body, enemy ? 1.15 : 1.0, .2), dark = paint(o.dark, 1.1, .2), tailM = paint(o.tail, 1.0, .2);
+  const paint0 = paint, lowPaint = (...a) => { const m = paint0(...a); m.userData.hi = { n: m.normalMap, r: m.roughnessMap, c: m.clearcoat }; if (quality === 'low') { m.normalMap = m.roughnessMap = null; m.clearcoat = 0; m.roughness = Math.max(m.roughness, .6); } return m; };
+  const body = lowPaint(o.body, enemy ? 1.15 : 1.0, .2), dark = lowPaint(o.dark, 1.1, .2), tailM = lowPaint(o.tail, 1.0, .2);
   const surf = body;
   const radome = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.body).multiplyScalar(.85), metalness: .1, roughness: .7 });
   const glass = new THREE.MeshStandardMaterial({ color: D && D.canopy && D.canopy.gold ? 0x6a5a22 : 0x18242c, metalness: .95, roughness: .06, transparent: true, opacity: .88, emissive: 0x05090c });
@@ -3735,9 +3738,13 @@ $('#quitBtn').addEventListener('click', () => { if (SND.ctx) SND.ctx.resume(); t
 $('#retryBtn').addEventListener('click', () => startMission());
 $('#menuBtn').addEventListener('click', toTitle);
 try { const s = JSON.parse(localStorage.getItem('skylance-opts') || '{}'); if (s.invert) $('#optInvert').checked = true; if (s.quality) $('#optQuality').value = s.quality; if (s.fps) $('#optFps').checked = true; if (s.blur === false) $('#optBlur').checked = false; if (s.beginner) $('#optBeginner').checked = true; if (s.lock) $('#optLock').value = s.lock; if (s.guide) $('#optGuide').checked = true; if (s.callsign) $('#callsign').value = s.callsign; } catch (e) {}
-const pixelRatioFor = q => q === 'low' ? Math.min(devicePixelRatio || 1, 1) * .7 : Math.min(devicePixelRatio || 1, 1.5);
+function jetDetail(low) { scene.traverse(o => { const m = o.material; if (!o.isMesh || !m || !m.isMeshPhysicalMaterial) return;
+  if (!m.userData.hi) m.userData.hi = { n: m.normalMap, r: m.roughnessMap, c: m.clearcoat };
+  const h = m.userData.hi, n = low ? null : h.n, r = low ? null : h.r; if (m.normalMap !== n || m.roughnessMap !== r) { m.normalMap = n; m.roughnessMap = r; m.needsUpdate = true; }
+  m.clearcoat = low ? 0 : h.c; if (low) m.roughness = Math.max(m.roughness, .6); }); }
+const pixelRatioFor = q => Math.min(devicePixelRatio || 1, 1.5);
 function applyQuality(q) {
-  quality = q; LOWQ.value = q === 'low' ? 1 : 0; CLOUDS.forEach((c, i) => { c.visible = q !== 'low' || i % 3 === 0; }); sun.castShadow = q !== 'low'; renderer.setPixelRatio(pixelRatioFor(q)); resize(); post.first = true;
+  quality = q; LOWQ.value = q === 'low' ? 1 : 0; CLOUDS.forEach((c, i) => { c.visible = q !== 'low' || i % 3 === 0; }); jetDetail(q === 'low'); sun.castShadow = q !== 'low'; renderer.setPixelRatio(pixelRatioFor(q)); resize(); post.first = true;
   const qb = $('#qualityBtn'); if (qb) qb.textContent = '描画モード：' + (q === 'low' ? 'FPS重視' : 'グラフィック重視');
   if ($('#optQuality').value !== q) $('#optQuality').value = q;
   try { localStorage.setItem('skylance-opts', JSON.stringify({ invert: $('#optInvert').checked, quality: q, fps: $('#optFps').checked, blur: $('#optBlur').checked, beginner: $('#optBeginner').checked, lock: $('#optLock').value, guide: $('#optGuide').checked, callsign: $('#callsign').value })); } catch (e) {}
