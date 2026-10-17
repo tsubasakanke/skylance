@@ -909,27 +909,36 @@ const AF = {
 function capGlint(sh) { sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n reflectedLight.directSpecular = min(reflectedLight.directSpecular, vec3(0.55));'); }
 // retractable landing gear: nose + two mains with bay doors. gearSet(1) = down and locked, gearSet(0) = stowed (hidden)
 const TIRE = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: .9 }), HUBM = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .7, roughness: .35 });
-function addGear(g, u, D, shape, metal) {
-  const bottom = z => { if (!D) return -.75; let b = D.body[0]; for (const S of D.body) if (Math.abs(S.z - z) < Math.abs(b.z - z)) b = S; return (b.y || 0) - b.h * (b.bot != null ? b.bot : 1); };
-  const zN = D ? D.body[0].z + D.len * .2 : -6.5, zM = D ? (D.wing.rt[2] + D.wing.rt[3]) / 2 + .4 : 1.2, xM = D ? Math.min(D.wing.rt[0] * .8, D.nacelles ? D.nacelles.x : 2.1) : 3;
-  const yN = bottom(zN), yM = (D && D.nacelles ? D.nacelles.y - D.nacelles.h : bottom(zM)), LN = 1.55, LM = 1.45, RN = .36, RM = .5;
+function addGear(g, u, D, shape, metal, skinM) {
+  const bottom = z => { if (!D) return -.47; let b = D.body[0]; for (const S of D.body) if (Math.abs(S.z - z) < Math.abs(b.z - z)) b = S; return (b.y || 0) - b.h * (b.bot != null ? b.bot : 1); };
+  const halfW = z => { if (!D) return 3; let b = D.body[0]; for (const S of D.body) if (Math.abs(S.z - z) < Math.abs(b.z - z)) b = S; return b.w; };
+  const zN = D ? D.body[0].z + D.len * .2 : -6.5, zM = D ? (D.wing.rt[2] + D.wing.rt[3]) / 2 + .4 : 1.2;
+  const LN = 1.55, LM = 1.45, RN = .36, RM = .5;
+  const xM = D ? (D.nacelles ? D.nacelles.x : clamp(halfW(zM) * .55, .9, 2.1)) : 2.4;
+  const yN = bottom(zN) + .04, yM = (D && D.nacelles ? D.nacelles.y - D.nacelles.h : bottom(zM)) + .04;
   const legs = [], doors = [];
-  const leg = (x, y, z, L, R, twin, foldSign) => {
-    const pv = new THREE.Group(); pv.position.set(x, y, z); g.add(pv);
+  const leg = (x, y, z, L, R, twin) => {
+    const root = new THREE.Group(); root.position.set(x, y, z); g.add(root); // bay origin; the leg rides up into it once folded
+    const pv = new THREE.Group(); root.add(pv);
     const st = new THREE.Mesh(new THREE.CylinderGeometry(.075, .09, L, 8), metal); st.position.y = -L / 2; pv.add(st);
     const lk = new THREE.Mesh(new THREE.BoxGeometry(.05, L * .45, .16), metal); lk.position.set(0, -L * .55, .16); lk.rotation.x = .35; pv.add(lk);
     for (const sx of twin ? [-.2, .2] : [0]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(R, R, .24, 16), TIRE); w.rotation.z = Math.PI / 2; w.position.set(sx, -L, 0); pv.add(w);
-      const hb = new THREE.Mesh(new THREE.CylinderGeometry(R * .5, R * .5, .26, 10), HUBM); hb.rotation.z = Math.PI / 2; hb.position.copy(w.position); pv.add(hb); }
-    legs.push({ pv, fold: 1.5 * foldSign });
-    for (const sd of [-1, 1]) { const dp = new THREE.Group(); dp.position.set(x + sd * .32, y + .02, z); g.add(dp);
-      const pl = new THREE.Mesh(new THREE.BoxGeometry(.3, .03, L * .75), metal); pl.position.x = -sd * .15; dp.add(pl); doors.push({ dp, sd }); }
+      const hb = new THREE.Mesh(new THREE.CylinderGeometry(R * .5, R * .5, .26, 10), HUBM); hb.position.copy(w.position); hb.rotation.z = Math.PI / 2; pv.add(hb); }
+    // bay: dark well + two doors in the skin colour, hinged on the outer edges, spanning the folded leg
+    const bw = (twin ? .5 : .32) + R * .5, bl = L + R + .35, bz = z - bl / 2 + .2;
+    const well = new THREE.Mesh(new THREE.PlaneGeometry(bw * 2, bl), new THREE.MeshBasicMaterial({ color: 0x0b0c0d })); well.rotation.x = Math.PI / 2; well.position.set(x, y + .02, bz); g.add(well);
+    for (const sd of [-1, 1]) { const dp = new THREE.Group(); dp.position.set(x + sd * bw, y - .01, bz); g.add(dp);
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(bw, .035, bl), skinM || metal); pl.position.x = -sd * bw / 2; dp.add(pl); doors.push({ dp, sd }); }
+    legs.push({ root, pv, lift: R + .14, well });
   };
-  leg(0, yN, zN, LN, RN, true, 1); leg(-xM, yM, zM, LM, RM, false, 1); leg(xM, yM, zM, LM, RM, false, 1);
+  leg(0, yN, zN, LN, RN, true); leg(-xM, yM, zM, LM, RM, false); leg(xM, yM, zM, LM, RM, false);
   u.gearH = -Math.min(yN - LN - RN, yM - LM - RM);
-  u.gearCam = new V3(0, yN - LN * .6, zN); // where the takeoff camera looks during retraction
-  u.gearSet = k => { k = clamp(k, 0, 1); const vis = k > .01;
-    for (const l of legs) { l.pv.rotation.x = (1 - k) * l.fold; l.pv.visible = vis; }
-    const dk = clamp(k * 3, 0, 1); for (const d of doors) { d.dp.rotation.z = d.sd * dk * 1.35; d.dp.visible = vis; } };
+  u.gearCam = new V3(0, yN - LN * .6, zN); u.gearCamOff = D ? new V3(4.2, -3.4, -3.5) : new V3(8, -5.5, -7);
+  // k: 1 = down & locked … 0 = stowed. Fold + lift happen with the doors open; the doors close last, then the leg is hidden behind them
+  u.gearSet = k => { k = clamp(k, 0, 1); const f = clamp((1 - k) / .72, 0, 1), fe = f * f * (3 - 2 * f), lift = clamp((f - .7) / .3, 0, 1), dOpen = clamp(k / .28, 0, 1);
+    for (const l of legs) { l.pv.rotation.x = fe * 1.57; l.root.position.y = l.root.userData.y0 + lift * l.lift; l.pv.visible = l.well.visible = k > 0; }
+    for (const d of doors) { d.dp.rotation.z = d.sd * dOpen * 1.45; d.dp.visible = k > 0 && k < 1.01; } };
+  for (const l of legs) l.root.userData.y0 = l.root.position.y;
   u.gearSet(0);
 }
 function makeJet(o) {
@@ -1087,7 +1096,7 @@ function makeJet(o) {
   mf.position.set(gp[0], gp[1], gp[2] - 1); mf.scale.setScalar(2.2); mf.visible = false; g.add(mf); u.muzzle = mf;
   u.tips = shape === 'wing' ? [new V3(-12.9, .15, 3.6), new V3(12.9, .15, 3.6)] : [new V3(-D.wing.tp[0], D.wing.tp[1], (D.wing.tp[2] + D.wing.tp[3]) / 2 + .3), new V3(D.wing.tp[0], D.wing.tp[1], (D.wing.tp[2] + D.wing.tp[3]) / 2 + .3)];
   u.exh = shape === 'wing' ? [new V3(-2.4, .66, 5.6), new V3(2.4, .66, 5.6)] : [new V3(-D.nozzle.x, D.nozzle.y || 0, D.nozzle.z + 1.2), new V3(D.nozzle.x, D.nozzle.y || 0, D.nozzle.z + 1.2)];
-  addGear(g, u, D, shape, metal);
+  addGear(g, u, D, shape, metal, body);
   g.userData = u;
   g.traverse(m => { if (m.isMesh && m.material && !m.material.transparent && (m.material.isMeshStandardMaterial)) { m.castShadow = true; m.receiveShadow = true; } });
   return g;
@@ -4466,7 +4475,7 @@ function briefUpdate(dt) {
   if (BRF.ph === 'spool') cp = _v3.copy(P.pos).addScaledVector(R.dir, -24 + t * .7).addScaledVector(side, 8).add(_v4.set(0, R.land ? 3 : 4, 0));
   else if (BRF.ph === 'roll') cp = _v3.copy(P.pos).addScaledVector(side, R.land ? 30 : 22).addScaledVector(R.dir, 8).add(_v4.set(0, R.land ? 4 : 6, 0));
   else if (BRF.ph === 'gear') { // rigidly mounted ahead of and below the nose, looking back at the nose gear
-    cp = P.mesh.localToWorld(_v3.set(4.2, ud.gearCam.y - 3.4, ud.gearCam.z - 3.5)); look = P.mesh.localToWorld(_v5.copy(ud.gearCam).add(_v4.set(-.4, -.4, 3.2))); k = 1; cut = BRF.phT < dt * 1.5; }
+    cp = P.mesh.localToWorld(_v3.copy(ud.gearCamOff).add(ud.gearCam)); look = P.mesh.localToWorld(_v5.copy(ud.gearCam).add(_v4.set(-.4, -.4, 3.2))); k = 1; cut = BRF.phT < dt * 1.5; }
   else { if (!BRF.fix) { BRF.fix = true; cut = true; } const back = 28 + BRF.phT * 34; // trail behind and let it pull away
     cp = _v3.copy(P.pos).addScaledVector(R.dir, -back).addScaledVector(side, 6 + BRF.phT * 2).add(_v4.set(0, 4 + BRF.phT * 1.5, 0)); look = _v5.copy(P.pos).addScaledVector(R.dir, 30); k = 1; }
   if (BRF.carrier && BRF.carrier.userData.radar) BRF.carrier.userData.radar.rotation.y += dt * 2.4;
