@@ -1521,7 +1521,7 @@ const PARTS = {
     // extreme builds: deliberately lopsided, for players who want a monster
     { id: 'meteor', n: 'METEOR', d: '【極端】ほぼロケット。最高速は標準機の2倍だが、ほとんど曲がれない。一撃離脱専用', hp: .6, turn: .32, spd: 2, cap: 70, sc: [.85, .8, 1.3], shape: 'delta' },
     { id: 'hummingbird', n: 'HUMMINGBIRD', d: '【極端】その場で回れるほどの旋回性能。そのかわり遅くて紙装甲', hp: .55, turn: 2.2, spd: .6, cap: 85, sc: [.82, .9, .82], shape: 'fsw' },
-    { id: 'bastion', n: 'BASTION', d: '【極端】空飛ぶ要塞。耐久は標準機の3倍、旋回も速度も鈍重', hp: 3, turn: .55, spd: .68, cap: 200, sc: [1.18, 1.2, 1.15], shape: 'heavy' }],
+    { id: 'bastion', n: 'BASTION', d: '【極端】突撃重戦車。体当たりしても自分は壊れず弾き返すだけ。ぶつけて落とせ！（敵機は一撃、ボスにも大ダメージ）', hp: 2.4, turn: .62, spd: .8, cap: 200, sc: [1.18, 1.2, 1.15], shape: 'heavy', ram: true }],
   engine: [
     { id: 'std', n: 'F110 標準', d: 'クセのない標準エンジン', thr: 1, w: 30 },
     { id: 'turbo', n: 'TURBOFAN-X', d: '加速もアフターバーナーも強力。ただし重い', thr: 1.14, w: 45 },
@@ -1560,7 +1560,7 @@ const overweight = () => loadWeight() > part('frame').cap;
 function stats() {
   const f = part('frame'), a = part('armor'), e = part('engine'), g = part('gun');
   const load = loadWeight() / f.cap; // a heavily loaded jet is slower
-  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd * (1.06 - .12 * load) * (a.id === 'a2' ? .96 : 1), thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, gunSpd: g.spd || 1300, sp: part('special'), stealth: !!f.stealth };
+  return { hp: f.hp + a.hp, turn: f.turn * (1 + a.turn), spd: f.spd * (1.06 - .12 * load) * (a.id === 'a2' ? .96 : 1), thr: e.thr, gunRate: g.rate, gunDmg: g.dmg, gunVd: g.vd, gunSpd: g.spd || 1300, sp: part('special'), stealth: !!f.stealth, ramFrame: !!f.ram };
 }
 let ST = stats();
 // base HP per mode: versus lasts much longer than the solo campaign
@@ -1659,7 +1659,7 @@ function placeGround() {
 }
 function startMission() {
   mode = 'mission';
-  clearMission(); campClear(); CAMP.m = null; setMap('home'); placeSupplySite(new V3(0, 0, 14500));
+  clearMission(); campClear(); CAMP.m = null; setMap('home');
   state = 'play'; missionTime = 0; timeLeft = 720; score = 0; kills = 0; phase = 1; endTimer = 0; missionResult = null; shake = 0; outTimer = 0;
   timeScale = 1; slowmoT = 0; lastKillT = -99; chain = 0;
   Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
@@ -2078,6 +2078,7 @@ function collidables() {
 }
 function checkCollisions() {
   const P = player; if (!P.alive || P.frozen || state !== 'play') return;
+  if ((P.ramIT || 0) > performance.now()) return;
   for (const t of collidables()) { const r = (t.radius || 15) * (t.boss ? 1 : .75) + 7; if (t.pos.distanceToSquared(P.pos) < r * r) { ramInto(t); return; } }
 }
 const trimHits = () => { if (NET.hits.length > 12) NET.hits.shift(); };
@@ -2087,7 +2088,7 @@ function ramDamage(t, hard) {
   else destroy(t, true);
 }
 function ramInto(t) {
-  const P = player, hard = !!P.ram, big = !!(t.isBoss || t.boss || t.pod);
+  const P = player, hard = !!P.ram || ST.ramFrame, big = !!(t.isBoss || t.boss || t.pod);
   explode(P.pos.clone(), hard ? 2.6 : 1.6); shake = 2; fx.flash = Math.max(fx.flash, hard ? .45 : .25);
   if (t.remote) { NET.hits.push([t.peer, 999, ++NET.hitSeq, 3]); trimHits(); }
   else if (t.puppet) { const L = roster()[0]; NET.hits.push([L, hard ? 2 : 1, ++NET.hitSeq, 2, t.id]); trimHits(); t.myHitT = performance.now(); }
@@ -2095,6 +2096,12 @@ function ramInto(t) {
   if (hard) { shockwave(P.pos, 340, .9, new THREE.Color(2.6, 1.5, .6)); for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 450) damage(e, e.isBoss || e.boss || e.pod ? 260 : 450, true, 90); }
   else for (const e of aliveTargets()) if (e !== t && e.pos.distanceTo(P.pos) < 180) damage(e, 120, true, 30);
   showMsg(big ? 'RAMMED' : 'RAM KILL', AMBER, 2.2, true);
+  if (ST.ramFrame && !P.ram) { // armoured rammer: shrug it off, bounce, keep flying
+    P.hp -= P.maxHp * (big ? .18 : .07); P.speed *= .72; P.ramIT = performance.now() + (big ? 1400 : 700); fx.red = .6; shake = 2.2;
+    if (radioCooldown <= 0) { radio('NIGHTJAR', pick(['正面からぶち当てた！？ 無茶苦茶だ…！', 'あの機体、本当に体当たりで落としたぞ！', '装甲で弾き返した！ まだ飛べるぞ！']), 3, true); radioCooldown = 6; }
+    if (P.hp <= 0) { P.hp = 0; killPlayer('体当たり', t.remote ? t.peer : null); }
+    return;
+  }
   killPlayer('体当たり', t.remote ? t.peer : null);
 }
 function killPlayer(reason, killer) {
@@ -4090,9 +4097,9 @@ const CMISSIONS = [
       if (missionTime > 5 && !enemies.some(e => e.alive && !e.pod)) return campEnd(true);
     },
     win: [['GRIFFON', '腕は確かだな、ケストレル。'], ['NIGHTJAR', '…最後の偵察機が妙な電文を送っていた。暗号が我々の軍用コードに似ている。気になるな。']] },
-  { id: 3, title: '灰色の艦隊', en: 'Grey Fleet', map: 'ocean', time: 660,
+  { id: 3, title: '灰色の艦隊', en: 'Grey Fleet', map: 'ocean', time: 660, supply: true,
     story: 'リュミエール島を奪い返されたヴァルカが、報復の上陸艦隊をグレイ海に送り込んできた。戦艦2隻を中心に巡洋艦・駆逐艦が輪形陣を組み、その中心に輸送艦を抱えている。輸送艦が防衛線を越えれば島は占領される。ホルスト提督からは「戦艦を最優先で叩け」との命令。',
-    facts: [['目的', '輸送艦6隻と戦艦2隻の撃沈（護衛艦はボーナス）'], ['敗北', '輸送艦が3隻、防衛線（南）を越える'], ['注意', '艦隊に近づくと機関砲と対空砲火の弾幕。低く速く突っ込め']],
+    facts: [['目的', '輸送艦6隻と戦艦2隻の撃沈（護衛艦はボーナス）'], ['敗北', '輸送艦が3隻、防衛線（南）を越える'], ['注意', '艦隊に近づくと機関砲と対空砲火の弾幕。低く速く突っ込め'], ['補給', '味方の空母・基地の上を低空（200m以下）で通過すると弾薬補給']],
     start() {
       player.pos.set(0, 2200, 14000);
       const C = [0, -10000], V = 36, put = (type, dx, dz, label) => { const g = campGround(type, C[0] + dx, C[1] + dz, 0, { rot: Math.PI }); g.vel.set(0, 0, V); if (label) g.label = label; if (type === 'LST') g.lineZ = 8500; return g; };
@@ -4239,9 +4246,9 @@ const CMISSIONS = [
       if (CAMP.f.jackal && !CAMP.f.jackal.alive) return campEnd(true);
     },
     win: [['NIGHTJAR', 'ジャッカルの脱出を確認。…SERAPHが起動したとの情報だ。最後の戦いになる。']] },
-  { id: 10, title: '落ちない槍', en: 'Unfallen Lance', map: 'final', time: 900,
+  { id: 10, title: '落ちない槍', en: 'Unfallen Lance', map: 'final', time: 900, supply: true,
     story: 'SERAPHが起動し、両国の空を無人機の群れが覆い始めた。もはや国と国の戦争ではない。夕日の雲海の果て、AI母艦へ向かえ。これが最後の出撃だ。',
-    facts: [['目的', '無人機群の突破 → SERAPHの撃墜'], ['味方', 'WREN ほか'], ['敗北', '撃墜される']],
+    facts: [['目的', '無人機群の突破 → SERAPHの撃墜'], ['味方', 'WREN ほか'], ['敗北', '撃墜される'], ['補給', '味方の空母・基地の上を低空（200m以下）で通過すると弾薬補給']],
     start() {
       player.pos.set(0, 3200, 14500); campAlly('WREN', 0xe07a2a, 400, 3300, 14700); campAlly('LYNX', 0x3a6ea5, -400, 3100, 14800);
       const drone = (n, z) => squad('I', n, 0, 3400, z, 4000, { label: 'DRONE', drone: false, noEvade: true, score: 600, hp: 60 });
@@ -4276,7 +4283,7 @@ function campTick(dt) {
   if (!missionResult) CAMP.m.tick(dt);
 }
 function campClear() {
-  SUPPLY.site = null; SUPPLY.prog = 0; SUPPLY.cd = 0; SUPPLY.lowT = 0;
+  SUPPLY.on = false; SUPPLY.site = null; SUPPLY.prog = 0; SUPPLY.cd = 0; SUPPLY.lowT = 0;
   TRC.list.length = 0; if (TRC.mesh) TRC.mesh.geometry.setDrawRange(0, 0);
   for (const e of CAMP.escorts) if (e.mesh) scene.remove(e.mesh); for (const a of CAMP.allies) scene.remove(a.mesh); for (const m of CAMP.extras) scene.remove(m);
   if (CAMP.ghost) scene.remove(CAMP.ghost.m);
@@ -4292,7 +4299,7 @@ function startCampaign(i) {
   player.quat.identity(); player.velDir.set(0, 0, -1); player.mesh.visible = true; player.mesh.userData.pylons.forEach(p => p.visible = true);
   curTarget = null; lockT = 0; locked = false; camView = 0; camOffset.set(0, 7, 32); post.first = true;
   M.start();
-  placeSupplySite(player.pos);
+  placeSupplySite(player.pos); SUPPLY.on = !!M.supply; // the site is always there for the takeoff; only some missions let you rearm on it
   player.velDir.set(0, 0, -1).applyQuaternion(player.quat);
   $('#title').hidden = true; $('#camp').hidden = true; $('#result').hidden = true; $('#pause').hidden = true; $('#touch').hidden = !isTouch; $('#tut').hidden = true;
   initAudio(); setGuide(opts.guide); showMsg(`MISSION ${String(M.id).padStart(2, '0')}  ${M.en.toUpperCase()}`, HUDC, 4, true);
@@ -4477,7 +4484,7 @@ function placeCarrier(x, z, ang) {
   return m;
 }
 /* ---- resupply: a low pass over a friendly base or carrier rearms and patches the jet ---- */
-const SUPPLY = { site: null, spots: {}, prog: 0, cd: 0, lowT: 0 };
+const SUPPLY = { site: null, spots: {}, prog: 0, cd: 0, lowT: 0, on: false };
 function placeSupplySite(near) {
   const R = SUPPLY.spots[mapId] || (SUPPLY.spots[mapId] = findRunway(near)); // same spot every sortie on a map, so the levelled pad is reused
   const ang = Math.atan2(-R.dir.x, -R.dir.z);
@@ -4491,7 +4498,7 @@ function supplyZone() { // horizontal distance to the strip / deck and height ab
   return { off, agl: P.pos.y - S.top, dist: Math.hypot(dx, dz) };
 }
 function supplyStep(dt) {
-  const S = SUPPLY.site, P = player; if (!S || !P.alive || missionResult) return;
+  const S = SUPPLY.site, P = player; if (!S || !SUPPLY.on || !P.alive || missionResult) return;
   SUPPLY.cd = Math.max(0, SUPPLY.cd - dt);
   const z = supplyZone(), inside = z.off < 1 && z.agl < 200 && z.agl > -5;
   if (inside && SUPPLY.cd <= 0) {
@@ -4506,7 +4513,7 @@ function supplyStep(dt) {
   if (P.msl <= 8 && SUPPLY.cd <= 0 && (SUPPLY.lowT -= dt) <= 0) { SUPPLY.lowT = 40; radio('NIGHTJAR', `ミサイル残り${P.msl}発。${S.land ? '基地' : '空母'}の上を低空で通過すれば補給できるぞ。`, 4.5); }
 }
 function drawSupplyHud(c, s, blink, font) {
-  const S = SUPPLY.site, P = player; if (!S || !P.alive) return;
+  const S = SUPPLY.site, P = player; if (!S || !SUPPLY.on || !P.alive) return;
   const z = supplyZone(), col = SUPPLY.cd > 0 ? 'rgba(127,200,255,.45)' : '#7fc8ff';
   _v6.set(S.x, S.top + 40, S.z); toScreen(_v6, sp);
   let x = sp.x, y = sp.y; const m = 40 * s, on = !sp.behind && x > m && x < W - m && y > m && y < H - m;
