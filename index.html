@@ -950,7 +950,12 @@ function addGear(g, u, D, shape, metal, skinM) {
   u.gearSet(0);
 }
 const DUCT_M = new THREE.MeshStandardMaterial({ color: 0x2a2c2f, roughness: .7, metalness: .3, side: THREE.DoubleSide }), DUCT_DEEP = new THREE.MeshBasicMaterial({ color: 0x050506 }), FAN_M = new THREE.MeshStandardMaterial({ color: 0x3a3c40, metalness: .8, roughness: .35 });
-const NOZ_LINER = new THREE.MeshStandardMaterial({ color: 0x3b3430, roughness: .55, metalness: .7, side: THREE.DoubleSide });
+const NOZ_LINER = new THREE.MeshStandardMaterial({ color: 0x1d1a17, roughness: .9, metalness: .2, envMapIntensity: .15, side: THREE.DoubleSide });
+const TAIL_CAP = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: .85, metalness: .3, envMapIntensity: .2, side: THREE.DoubleSide });
+// filled superellipse matching a loft section, used to close open hull ends
+function secCap(S, n = 28) { const sh = new THREE.Shape(), e = S.e || 2; for (let k = 0; k <= n; k++) { const a = k / n * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+  const x = S.w * Math.sign(c) * Math.pow(Math.abs(c), 2 / e) + (S.x || 0), y = (s2 >= 0 ? S.h * (S.top ?? 1) : S.h * (S.bot ?? 1)) * Math.sign(s2) * Math.pow(Math.abs(s2), 2 / e) + (S.y || 0); k ? sh.lineTo(x, y) : sh.moveTo(x, y); }
+  const g = new THREE.ShapeGeometry(sh); g.translate(0, 0, S.z); return g; }
 function makeJet(o) {
   const shape = AF[o.shape] ? o.shape : o.shape === 'wing' ? 'wing' : 'classic', D = AF[shape], g = new THREE.Group();
   const enemy = !!o.enemy, skin = enemy ? SKIN.camo : SKIN.plain;
@@ -987,7 +992,8 @@ function makeJet(o) {
   // nozzle: petal ring, dark throat, hot inner glow, and a shader flame (see FLAME)
   const nozzle = (x, y, z, r, flat) => {
     const nz = pivot(g, x, y, z); nz.scale.setScalar(engMul);
-    if (flat) { mesh(loftGeo([{ z: 0, w: r * 1.15, h: r * .75, e: 5 }, { z: .9, w: r * 1.05, h: r * .55, e: 5 }, { z: 1.4, w: r, h: r * .45, e: 6 }], 20), metal, nz); }
+    if (flat) { mesh(loftGeo([{ z: 0, w: r * 1.15, h: r * .75, e: 5 }, { z: .9, w: r * 1.05, h: r * .55, e: 5 }, { z: 1.4, w: r, h: r * .45, e: 6 }], 20), metal, nz);
+      mesh(loftGeo([{ z: .05, w: r * 1.05, h: r * .66, e: 5 }, { z: .9, w: r * .96, h: r * .48, e: 5 }, { z: 1.36, w: r * .92, h: r * .39, e: 6 }], 20), NOZ_LINER, nz); }
     else {
       const pg = new THREE.CylinderGeometry(r * .92, r * 1.04, 1.4, 24, 1, true); pg.rotateX(-Math.PI / 2); pg.translate(0, 0, .7);
       const pm = mesh(pg, new THREE.MeshStandardMaterial({ color: 0x5a5b5d, metalness: .85, roughness: .45, side: THREE.DoubleSide, map: PETALS }), nz);
@@ -995,7 +1001,7 @@ function makeJet(o) {
     const liner = new THREE.CylinderGeometry(r * .8, r * .78, 1.1, 20, 1, true); liner.rotateX(-Math.PI / 2); liner.translate(0, 0, .6);
     const ln = mesh(liner, NOZ_LINER, nz); ln.scale.y = flat ? .5 : 1;
     for (const [zz, rr] of [[.35, .55], [.2, .3]]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(r * rr, r * .035, 6, 20), NOZ_LINER); ring.position.z = zz; ring.scale.y = flat ? .5 : 1; nz.add(ring); } // flame holders
-    const throat = new THREE.Mesh(new THREE.CircleGeometry(r * .8, 20), new THREE.MeshBasicMaterial({ color: 0x0a0806 })); throat.position.z = .08; throat.scale.y = flat ? .5 : 1; nz.add(throat);
+    const throat = new THREE.Mesh(flat ? secCap({ z: 0, w: r * 1.05, h: r * .66, e: 5 }) : new THREE.CircleGeometry(r * .8, 20), new THREE.MeshBasicMaterial({ color: 0x0a0806, side: THREE.DoubleSide })); throat.position.z = .08; nz.add(throat);
     const hot = new THREE.Mesh(new THREE.CircleGeometry(r * .62, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, .55, .15), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); hot.position.z = .12; hot.scale.y = flat ? .5 : 1; nz.add(hot);
     const fl = makeFlame(r * (flat ? 1.1 : .95), flat); fl.position.z = flat ? 1.35 : 1.3; nz.add(fl);
     const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(2.4, 1.2, .5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); gl.position.z = 1.6; nz.add(gl); u.diamonds.push(gl);
@@ -1034,7 +1040,7 @@ function makeJet(o) {
     u.pylons = [u.pylons[1], u.pylons[3], u.pylons[0], u.pylons[2]];
   } else {
     // ---- fuselage, nose radome, canopy
-    const bodyGeo = loftGeo(D.body, 36); mesh(bodyGeo, body);
+    const bodyGeo = loftGeo(D.body, 36); mesh(bodyGeo, body); mesh(secCap(D.body[D.body.length - 1]), TAIL_CAP);
     const noseSecs = D.body.slice(0, 5); mesh(loftGeo(noseSecs.map((s, i) => Object.assign({}, s, { w: s.w * 1.01, h: s.h * 1.01, z: s.z - .001 })), 36), radome);
     const C = D.canopy;
     const canGeo = loftGeo([{ z: C.z0, w: .05, h: .04, y: C.y - .02 }, { z: lerp(C.z0, C.z1, .2), w: C.w * .8, h: C.h * .75, y: C.y, bot: .2 }, { z: lerp(C.z0, C.z1, .55), w: C.w, h: C.h, y: C.y, bot: .2 }, { z: C.z1, w: C.w * .7, h: C.h * .55, y: C.y, bot: .2 }, { z: C.z1 + .9, w: .1, h: .08, y: C.y }], 28);
