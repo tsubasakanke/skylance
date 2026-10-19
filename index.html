@@ -2477,21 +2477,36 @@ function buildCockpit() {
   const mat = (c, r = .8, m = .15) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
   const panelM = mat(0x2b2f35, .82), darkM = mat(0x131518, .95, 0), coamM = mat(0x0d0e10, 1, 0), metalM = mat(0x6a6e73, .35, .75), suitM = mat(0x4b5139, .92, 0),
     gloveM = mat(0x2a241d, .8, 0), yellowM = mat(0xc9a227, .6, .1), mirrorM = mat(0xb8c4cc, .04, 1);
-  const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0, parent = S) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); parent.add(o); return o; };
+  const RT = new THREE.Group(); RT.position.set(0, -.055, -.03); S.add(RT); // whole pit sits a touch lower: more sky over the coaming
+  const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0, parent = RT) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); parent.add(o); return o; };
   // coaming / glareshield and the HUD unit
   add(new THREE.BoxGeometry(1.05, .06, .34), coamM, 0, -.2, -.82, .1);
   add(new THREE.CylinderGeometry(.03, .03, 1.02, 10), coamM, 0, -.17, -.66, 0, 0, Math.PI / 2);
   add(new THREE.BoxGeometry(.22, .09, .24), coamM, 0, -.25, -.69);
   // HUD combiner: two glass plates in a thin frame, tilted toward the pilot
-  const cg = new THREE.Group(); cg.position.set(0, -.07, -.6); cg.rotation.x = -.22; S.add(cg);
+  const cg = new THREE.Group(); cg.position.set(0, -.07, -.6); cg.rotation.x = -.22; RT.add(cg);
   const glassM = new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 1, .7), transparent: true, opacity: .06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   add(new THREE.PlaneGeometry(.21, .16), glassM, 0, 0, 0, 0, 0, 0, cg); add(new THREE.PlaneGeometry(.21, .16), glassM, 0, 0, -.02, 0, 0, 0, cg);
   for (const sx of [-1, 1]) add(new THREE.BoxGeometry(.008, .17, .02), metalM, sx * .108, 0, -.01, 0, 0, 0, cg);
   add(new THREE.BoxGeometry(.22, .008, .02), metalM, 0, .083, -.01, 0, 0, 0, cg);
   CK.comb = [new V3(-.105, -.15, -.58), new V3(.105, .01, -.618)];
   // main instrument panel, tilted toward the eye, with three colour MFDs
-  const pg = new THREE.Group(); pg.position.set(0, -.44, -.8); pg.rotation.x = -.32; S.add(pg);
-  add(new THREE.BoxGeometry(1.02, .36, .04), panelM, 0, 0, 0, 0, 0, 0, pg);
+  const pg = new THREE.Group(); pg.position.set(0, -.44, -.8); pg.rotation.x = -.32; RT.add(pg);
+  // panel face: seams, screws, engraved labels and small round gauges painted on, so the flat panel reads as a real one
+  const faceT = canvasTex(1024, 360, (g, w, h) => { g.fillStyle = '#2c3036'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; for (const x of [40, 330, 694, 984]) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } g.beginPath(); g.moveTo(0, 330); g.lineTo(w, 330); g.stroke();
+    g.fillStyle = '#6c7178'; for (let i = 0; i < 70; i++) { const x = [44, 326, 698, 980][i % 4], y = 12 + (i >> 2) * 20; if (y < h - 8) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); } }
+    g.fillStyle = '#d8dcd6'; g.font = 'bold 15px sans-serif'; g.textAlign = 'center';
+    [['BRT', 160, 20], ['CONT', 260, 20], ['BRT', 462, 20], ['CONT', 562, 20], ['BRT', 764, 20], ['CONT', 864, 20], ['MASTER ARM', 110, 345], ['A/A', 220, 345], ['A/G', 290, 345], ['FUEL', 900, 345], ['HOOK', 960, 300], ['GEAR', 70, 300]].forEach(([t, x, y]) => g.fillText(t, x, y));
+    for (const [x, y, r] of [[80, 230, 34], [80, 140, 30], [944, 140, 30], [944, 230, 34]]) { g.fillStyle = '#0c0e10'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.strokeStyle = '#9aa0a6'; g.lineWidth = 3; g.stroke();
+      g.strokeStyle = '#e8e8e2'; g.lineWidth = 2; for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; g.beginPath(); g.moveTo(x + Math.sin(a) * r * .72, y - Math.cos(a) * r * .72); g.lineTo(x + Math.sin(a) * r * .9, y - Math.cos(a) * r * .9); g.stroke(); } }
+    g.fillStyle = '#c9a227'; g.fillRect(36, 270, 60, 16); g.fillStyle = '#111'; for (let k = 0; k < 6; k++) g.fillRect(36 + k * 12, 270, 6, 16); });
+  add(new THREE.BoxGeometry(1.02, .36, .04), [panelM, panelM, panelM, panelM, new THREE.MeshStandardMaterial({ map: faceT, roughness: .8, metalness: .15 }), panelM], 0, 0, 0, 0, 0, 0, pg);
+  // up-front controller: green keypad display above the centre MFD
+  const ufcT = canvasTex(256, 128, (g, w, h) => { g.fillStyle = '#041204'; g.fillRect(0, 0, w, h); g.strokeStyle = '#4cff6a'; g.fillStyle = '#4cff6a'; g.lineWidth = 2; g.font = 'bold 18px ' + MONO; g.textAlign = 'center'; g.textBaseline = 'middle';
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLR', '0', 'ENT'].forEach((t, i) => { const x = 22 + (i % 3) * 44, y = 18 + Math.floor(i / 3) * 30; g.strokeRect(x - 18, y - 12, 36, 24); g.fillText(t, x, y + 1); });
+    g.textAlign = 'left'; ['COMM1 243.0', 'IFF  4', 'TCN  76X', 'ILS  OFF'].forEach((t, i) => g.fillText(t, 150, 18 + i * 28)); });
+  add(new THREE.BoxGeometry(.25, .12, .03), darkM, 0, .245, .0, 0, 0, 0, pg); add(new THREE.PlaneGeometry(.21, .095), new THREE.MeshBasicMaterial({ map: ufcT, color: new THREE.Color(1.3, 1.3, 1.3) }), 0, .245, .017, 0, 0, 0, pg);
   CK.mfd = [];
   [-.3, 0, .3].forEach(x => {
     const cv = document.createElement('canvas'); cv.width = cv.height = 256; const tex = new THREE.CanvasTexture(cv);
@@ -2522,10 +2537,10 @@ function buildCockpit() {
     add(new THREE.BoxGeometry(.02, .02, .4), yellowM, sx * .53, -.24, -.1); // canopy rail handles
   }
   // throttle on the left console, stick between the knees
-  CK.throttle = new THREE.Group(); CK.throttle.position.set(-.37, -.5, -.3); S.add(CK.throttle);
+  CK.throttle = new THREE.Group(); CK.throttle.position.set(-.37, -.5, -.3); RT.add(CK.throttle);
   add(new THREE.BoxGeometry(.05, .12, .05), metalM, 0, .06, 0, 0, 0, 0, CK.throttle); add(new THREE.BoxGeometry(.07, .05, .1), darkM, 0, .13, 0, 0, 0, 0, CK.throttle);
   add(new THREE.SphereGeometry(.05, 12, 8), gloveM, .005, .16, .01, 0, 0, 0, CK.throttle);
-  CK.stick = new THREE.Group(); CK.stick.position.set(0, -.74, -.42); S.add(CK.stick);
+  CK.stick = new THREE.Group(); CK.stick.position.set(0, -.74, -.42); RT.add(CK.stick);
   add(new THREE.CylinderGeometry(.06, .08, .05, 14), darkM, 0, 0, 0, 0, 0, 0, CK.stick);
   add(new THREE.CylinderGeometry(.013, .016, .34, 10), metalM, 0, .17, 0, 0, 0, 0, CK.stick);
   add(new THREE.BoxGeometry(.04, .09, .045), darkM, 0, .37, 0, -.2, 0, 0, CK.stick); add(new THREE.BoxGeometry(.012, .012, .012), new THREE.MeshBasicMaterial({ color: 0xaa2222 }), 0, .415, -.02, 0, 0, 0, CK.stick);
@@ -2535,13 +2550,32 @@ function buildCockpit() {
     add(new THREE.SphereGeometry(.085, 12, 8), suitM, sx * .14, -.6, -.55); }
   // canopy bow (windscreen frame) and rear-view mirrors
   for (const sx of [-1, 1]) {
-    const curve = new THREE.CatmullRomCurve3([new V3(sx * .52, -.22, -.82), new V3(sx * .45, .06, -.74), new V3(sx * .26, .3, -.52), new V3(0, .37, -.34)]);
-    add(new THREE.TubeGeometry(curve, 28, .024, 8, false), coamM, 0, 0, 0);
-    add(new THREE.BoxGeometry(.13, .045, .012), mirrorM, sx * .15, .315, -.43, .55, sx * -.2, 0);
+    const curve = new THREE.CatmullRomCurve3([new V3(sx * .6, -.22, -.8), new V3(sx * .54, .08, -.7), new V3(sx * .32, .34, -.48), new V3(0, .41, -.3)]);
+    add(new THREE.TubeGeometry(curve, 32, .014, 8, false), coamM, 0, 0, 0);
+    add(new THREE.BoxGeometry(.13, .045, .012), mirrorM, sx * .22, .355, -.43, .6, sx * -.25, 0);
   }
   // canopy glass: faint reflective shell
   const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xa8bccb, transparent: true, opacity: .05, metalness: 1, roughness: .04, depthWrite: false, side: THREE.BackSide }));
   shell.scale.set(.62, .6, 1.25); shell.position.set(0, -.22, -.05); S.add(shell);
+  // side consoles: switch panels painted on top, with a few real toggles and knobs standing proud
+  const consoleT = canvasTex(256, 768, (g, w, h) => { g.fillStyle = '#25292e'; g.fillRect(0, 0, w, h);
+    const names = ['RADAR', 'FLIR', 'LT TEST', 'ECM', 'NAV', 'INS', 'OXY', 'FUEL', 'ANTI ICE', 'EXT LT', 'COMM', 'IFF'];
+    for (let i = 0; i < 12; i++) { const y = 6 + i * 63; g.fillStyle = '#1c1f23'; g.fillRect(6, y, w - 12, 58); g.strokeStyle = '#000'; g.strokeRect(6, y, w - 12, 58);
+      g.fillStyle = '#d6d9d3'; g.font = 'bold 13px sans-serif'; g.fillText(names[i], 14, y + 16);
+      for (let k = 0; k < 4; k++) { const x = 30 + k * 56; g.fillStyle = '#8c9298'; g.beginPath(); g.arc(x, y + 38, 8, 0, 7); g.fill(); g.fillStyle = '#d6d9d3'; g.font = '9px sans-serif'; g.fillText(['ON', 'OFF', 'AUTO', 'STBY'][k], x - 10, y + 56); } } });
+  const consM = new THREE.MeshStandardMaterial({ map: consoleT, roughness: .8, metalness: .2 });
+  for (const sx of [-1, 1]) { const cb = add(new THREE.BoxGeometry(.2, .012, .62), [panelM, panelM, consM, panelM, panelM, panelM], sx * .42, -.512, -.3, 0, 0, sx * -.12);
+    for (let k = 0; k < 10; k++) { const tz = -.55 + k * .055, tx = sx * (.36 + (k % 3) * .045); const tg = add(new THREE.CylinderGeometry(.004, .004, .03, 6), metalM, tx, -.49, tz, .4, 0, 0); } }
+  // canopy jettison handle (yellow/black) on the left bow, ejection handle loop between the knees
+  const stripeT = canvasTex(64, 256, (g, w, h) => { g.fillStyle = '#e0b42a'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; for (let y = -64; y < h; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + 32); g.lineTo(w, y + 48); g.lineTo(0, y + 16); g.fill(); } });
+  stripeT.wrapS = stripeT.wrapT = THREE.RepeatWrapping; const stripeM = new THREE.MeshStandardMaterial({ map: stripeT, roughness: .6 });
+  add(new THREE.BoxGeometry(.035, .26, .03), stripeM, -.47, -.18, -.64, -.25, 0, .18);
+  const ej = add(new THREE.TorusGeometry(.07, .011, 8, 24, Math.PI), stripeM, 0, -.66, -.2, -.6, 0, 0);
+  // twin throttle levers in a slotted quadrant
+  add(new THREE.BoxGeometry(.08, .05, .3), darkM, -.37, -.53, -.28);
+  add(new THREE.BoxGeometry(.03, .1, .055), darkM, .02, .07, 0, 0, 0, 0, CK.throttle);
+  // third mirror and frame rivets on the bow
+  add(new THREE.BoxGeometry(.16, .045, .012), mirrorM, 0, .392, -.33, .9, 0, 0);
   CK.built = true;
 }
 // cockpit displays: left radar, centre attitude/engine, right stores/damage
@@ -2658,12 +2692,18 @@ function drawHUD() {
   const c = hx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
   if (state === 'title' || state === 'result' || state === 'mlobby' || state === 'hangar' || state === 'camp' || state === 'brief') return;
   const P = player, cockpit = camView === 1 && P.alive && !lookingAtTarget && state === 'play';
-  const s0 = clamp(Math.min(W, H) / 820, .58, 1.25), s = cockpit ? s0 * .68 : s0, cx = W / 2, cy = H / 2, now = performance.now() / 1000;
+  const s0 = clamp(Math.min(W, H) / 820, .58, 1.25), s = cockpit ? s0 * .9 : s0, cx = W / 2, cy = H / 2, now = performance.now() / 1000;
   const blink = Math.floor(now * 4) % 2 === 0;
   const font = (px, f = MONO) => { c.font = `${Math.round(px * s)}px ${f}`; };
   c.lineWidth = Math.max(1.2, 1.5 * s); c.strokeStyle = HUDC; c.fillStyle = HUDC; c.lineJoin = 'round';
   c.shadowColor = 'rgba(40,255,140,.5)'; c.shadowBlur = quality === 'low' ? 0 : 3;
-  const RC = cockpit && CK.rect && CK.rect.w > 20 ? CK.rect : null;
+  const RC = null; // helmet-mounted display: symbology covers the whole visor, not just the combiner glass
+  if (cockpit) { // visor: faint tint toward the rim, curved reflection, and a thin HMD frame cue
+    const vg = c.createRadialGradient(cx, cy * .92, Math.min(W, H) * .38, cx, cy, Math.max(W, H) * .78); vg.addColorStop(0, 'rgba(110,190,255,0)'); vg.addColorStop(1, 'rgba(40,90,130,.22)');
+    c.fillStyle = vg; c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(210,235,255,.06)'; c.lineWidth = 50 * s0; c.beginPath(); c.ellipse(cx, cy + H * .15, W * .66, H * .82, 0, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+    c.strokeStyle = 'rgba(141,255,180,.22)'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, cy, W * .47, H * .47, 0, 0, Math.PI * 2); c.stroke();
+    c.font = `${11 * s0}px ${MONO}`; c.fillStyle = 'rgba(141,255,180,.6)'; c.textAlign = 'center'; c.fillText('HMD  ·  JHMCS', cx, cy - H * .47 + 14 * s0); }
   if (RC) { c.save(); c.beginPath(); c.rect(RC.x - 4, RC.y - 4, RC.w + 8, RC.h + 8); c.clip(); }
 
   let fpmX = cx, fpmY = cy;
@@ -2874,10 +2914,10 @@ function drawHUD() {
   }
 
   // radar (in the cockpit view it lives on the left MFD)
-  if (!cockpit) { const rr = 92 * s; drawRadar(c, isTouch ? W - pad - rr - 10 * s : pad + rr + 10 * s, isTouch ? pad + rr + 60 * s : H - pad - rr - 10 * s, rr, s, blink); }
+  { const rr = 92 * s; drawRadar(c, isTouch ? W - pad - rr - 10 * s : pad + rr + 10 * s, isTouch ? pad + rr + 60 * s : H - pad - rr - 10 * s, rr, s, blink); }
 
   // weapons & damage panel
-  if (!cockpit) {
+  {
   const wx = W - pad, wy = H - pad - (isTouch ? 170 * s + 60 : 0);
   c.textAlign = 'right'; c.textBaseline = 'bottom'; font(15);
   const lines = [[`SCORE ${String(score).padStart(6, '0')}`, HUDC], [`FLR ${P.flares}`, HUDC], [`GUN ${P.gun}`, P.gun ? HUDC : WARN],
@@ -2926,7 +2966,7 @@ function drawHUD() {
   c.globalAlpha = 1;
   // radio subtitle
   if (radioCur) {
-    const bw = Math.min(600 * s, W - 2 * pad), by = cockpit ? 96 * s0 : H - pad - (isTouch ? 210 * s + 60 : 54 * s), bx = cx - bw / 2;
+    const bw = Math.min(600 * s, W - 2 * pad), by = H - pad - (isTouch ? 210 * s + 60 : 54 * s), bx = cx - bw / 2;
     c.shadowBlur = 0; c.fillStyle = 'rgba(0,14,10,.6)'; c.fillRect(bx, by, bw, 46 * s);
     c.fillStyle = radioCur.who === 'VANTA' ? AMBER : HUDC; c.fillRect(bx, by, 3 * s, 46 * s);
     c.textAlign = 'left'; c.textBaseline = 'top'; font(11); c.fillText(radioCur.who, bx + 12 * s, by + 6 * s);
@@ -3870,7 +3910,7 @@ function chipPlayer(amt, why) { if (!player.alive || immune()) return; player.hp
 function tracerStep(dt) {
   if (!TRC.mesh) return; const pa = TRC.mesh.geometry.attributes.position.array, ca = TRC.mesh.geometry.attributes.color.array; let n = 0;
   for (let i = TRC.list.length - 1; i >= 0; i--) { const t = TRC.list[i]; t.life -= dt; t.prev.copy(t.p); t.v.y -= 9.8 * dt; t.p.addScaledVector(t.v, dt);
-    if (t.hostile && player.alive && segPointDist(t.prev, t.p, player.pos) < 9) { chipPlayer(opts.beginner ? 0 : 1.6, '対空砲火'); hitSpark(player.pos); t.life = 0; }
+    if (t.hostile && player.alive && segPointDist(t.prev, t.p, player.pos) < 9) { chipPlayer(opts.beginner ? 0 : 1.15, '対空砲火'); hitSpark(player.pos); t.life = 0; }
     if (t.life <= 0 || t.p.y < 0) { TRC.list.splice(i, 1); continue; } }
   for (const t of TRC.list) { if (n >= TRC.max) break; const o = n * 6; _v1.copy(t.v).normalize().multiplyScalar(-28);
     pa[o] = t.p.x; pa[o + 1] = t.p.y; pa[o + 2] = t.p.z; pa[o + 3] = t.p.x + _v1.x; pa[o + 4] = t.p.y + _v1.y; pa[o + 5] = t.p.z + _v1.z;
@@ -3887,7 +3927,7 @@ function shipGuns(g, dt) {
     tracer(_v1, _v2, 900, true, TRC_RED); }
   if (d < 5200 && g.flakT <= 0 && (g.type === 'BB' || g.type === 'CG' || g.type === 'DD')) { g.flakT = g.type === 'BB' ? rand(.5, 1) : rand(1.2, 2.2);
     _v3.copy(player.pos).addScaledVector(player.vel, rand(.3, 1)).add(_v4.set(rand(-90, 90), rand(-60, 80), rand(-90, 90))); flakBurst(_v3);
-    if (_v3.distanceTo(player.pos) < 40) chipPlayer(opts.beginner ? 0 : 6, '対空砲火'); }
+    if (_v3.distanceTo(player.pos) < 40) chipPlayer(opts.beginner ? 0 : 4.5, '対空砲火'); }
 }
 // ---- spawning ----
 function campGround(type, x, z, h, o = {}) {
@@ -4046,7 +4086,7 @@ const CMISSIONS = [
     },
     win: [['GRIFFON', '腕は確かだな、ケストレル。'], ['NIGHTJAR', '…最後の偵察機が妙な電文を送っていた。暗号が我々の軍用コードに似ている。気になるな。']] },
   { id: 3, title: '灰色の艦隊', en: 'Grey Fleet', map: 'ocean', time: 660,
-    story: 'ヴァルカの上陸艦隊がグレイ海を南下中。戦艦2隻を中心に巡洋艦・駆逐艦が輪形陣を組み、その中心に輸送艦を抱えている。輸送艦が防衛線を越えれば島は占領される。ホルスト提督からは「戦艦を最優先で叩け」との命令。',
+    story: 'リュミエール島を奪い返されたヴァルカが、報復の上陸艦隊をグレイ海に送り込んできた。戦艦2隻を中心に巡洋艦・駆逐艦が輪形陣を組み、その中心に輸送艦を抱えている。輸送艦が防衛線を越えれば島は占領される。ホルスト提督からは「戦艦を最優先で叩け」との命令。',
     facts: [['目的', '輸送艦6隻と戦艦2隻の撃沈（護衛艦はボーナス）'], ['敗北', '輸送艦が3隻、防衛線（南）を越える'], ['注意', '艦隊に近づくと機関砲と対空砲火の弾幕。低く速く突っ込め']],
     start() {
       player.pos.set(0, 2200, 14000);
@@ -4216,6 +4256,9 @@ const CMISSIONS = [
     },
     win: [['SERAPH', '…計算…外…'], ['NIGHTJAR', 'SERAPHの撃墜を確認……！ 無人機群が停止していく！'], ['GRIFFON', 'やったな、ケストレル。お前は本当に…落ちない槍だ。'], ['NIGHTJAR', '全機、帰還せよ。…おかえり。']] }
 ];
+// play order (the fleet battle moved later: it was too hard as mission 3). `key` keeps each mission's original identity for its briefing lines
+{ const order = [1, 2, 4, 5, 6, 3, 7, 8, 9, 10], byKey = Object.fromEntries(CMISSIONS.map(m => [m.id, m]));
+  const re = order.map((k, i) => Object.assign(byKey[k], { key: k, id: i + 1 })); CMISSIONS.length = 0; CMISSIONS.push(...re); }
 function campEnd(win, reason) {
   if (missionResult) return;
   missionResult = win ? 'win' : 'fail'; endTimer = win ? 8 : 4;
@@ -4252,7 +4295,7 @@ const BRF = { t: 0, lines: [], li: -1, lt: 0, run: null, save: null, ending: fal
 const BRIEF_LINES = {
   1: [['ホルスト提督', '諸君、時間がない。ヴァルカが宣戦布告なしに巡航ミサイルを放った。'], ['ホルスト提督', '目標は首都の空軍基地だ。あれを失えば、この国の空は丸裸になる。'], ['GRIFFON', 'ケストレル、初陣がこれとはツイてないな。…だが、お前ならやれる。']],
   2: [['ホルスト提督', '基地は焼かれたが、翼はまだ残っている。セレス群島の臨時滑走路から作戦を続行する。'], ['ホルスト提督', '敵の偵察機がこちらを嗅ぎ回っている。位置を報告される前に、一機残らず落とせ。'], ['NIGHTJAR', '逃げ足は速い。北の空域外に出られたら終わりだ。']],
-  3: [['ホルスト提督', 'グレイ海に敵の上陸艦隊を確認。戦艦2隻を中心とした大艦隊だ。'], ['ホルスト提督', '…戦艦を最優先で沈めろ。輸送艦は後でいい。命令だ。'], ['GRIFFON', '（輸送艦を後回し…？ 提督らしくないな）'], ['NIGHTJAR', '艦隊の対空砲火は濃い。低く、速く突っ込め。']],
+  3: [['ホルスト提督', '島を取り返されたヴァルカが報復に出た。グレイ海に上陸艦隊、戦艦2隻を中心とした大艦隊だ。'], ['ホルスト提督', '…戦艦を最優先で沈めろ。輸送艦は後でいい。命令だ。'], ['GRIFFON', '（輸送艦を後回し…？ 提督らしくないな）'], ['NIGHTJAR', '艦隊の対空砲火は濃い。低く、速く突っ込め。']],
   4: [['ホルスト提督', '反撃の時だ。だがその前に、ノルド岬のレーダー網を潰す必要がある。'], ['NIGHTJAR', '高度150を超えれば探知される。海面すれすれを飛べ。'], ['GRIFFON', '波を蹴って飛ぶんだ。水しぶきが上がるくらいが丁度いい。']],
   5: [['ホルスト提督', 'ケルン山脈を越えて敵の前線を押し返す。'], ['ホルスト提督', 'ただし敵のエース部隊が出た場合は、即座に撤退しろ。深追いは許さん。'], ['NIGHTJAR', '緑の尾翼の部隊…噂の「ジャッカル」かもしれない。気をつけろ。']],
   6: [['ホルスト提督', 'リュミエール島の奪還作戦を発令する。夕暮れに乗じて空港を叩く。'], ['ホルスト提督', 'なお、北側からの進入は禁止とする。理由は聞くな。'], ['WREN', 'レン、本日付で第7飛行隊に合流！ ケストレル、よろしくね！']],
@@ -4434,7 +4477,7 @@ function startBrief(i) {
   else { const cv = placeCarrier(R.x, R.z, ang); cv.updateMatrixWorld(); BRF.carrier = cv; BRF.p0 = cv.localToWorld(cv.userData.cat.clone()).add(_v1.set(0, gh, 0)); BRF.len = 120; BRF.deckEnd = 110; }
   P.pos.copy(BRF.p0); P.quat.setFromUnitVectors(NEG_Z, R.dir); P.speed = 0; P.throttle = .3; ud.gearSet(1); BRF.gear = 1;
   Object.assign(BRF, { t: 0, li: -1, lt: 0, ending: false, dist: 0, v: 0, pitch: 0, alt: 0, ph: 'spool', phT: 0, fix: null, camInit: false });
-  BRF.lines = BRIEF_LINES[M.id] || [['HQ', M.story]];
+  BRF.lines = BRIEF_LINES[M.key || M.id] || [['HQ', M.story]];
   BRF.dur = Math.max(18, BRF.lines.reduce((a, l) => a + 1.4 + l[1].length * .085, 2.5));
   BRF.rollStart = Math.max(4.5, BRF.dur - 13.5);
   const el = briefDom(); el.hidden = false; $('#brF').style.opacity = 1; requestAnimationFrame(() => { $('#brF').style.opacity = 0; });
