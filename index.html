@@ -1659,7 +1659,7 @@ function placeGround() {
 }
 function startMission() {
   mode = 'mission';
-  clearMission(); campClear(); CAMP.m = null; setMap('home');
+  clearMission(); campClear(); CAMP.m = null; setMap('home'); placeSupplySite(new V3(0, 0, 14500));
   state = 'play'; missionTime = 0; timeLeft = 720; score = 0; kills = 0; phase = 1; endTimer = 0; missionResult = null; shake = 0; outTimer = 0;
   timeScale = 1; slowmoT = 0; lastKillT = -99; chain = 0;
   Object.assign(player, { speed: 260, prevSpeed: 260, throttle: .55, cp: 0, cr: 0, cy: 0, hp: refreshLoadout(), alive: true, msl: 64, gun: 1600, flares: 24, pylon: [0, 0, 0, 0], nextPylon: 0, flareCd: 0, maxG: 1 });
@@ -2887,6 +2887,7 @@ function drawHUD() {
   // objective (top-left)
   const pad = 18 * s + 4;
   font(12); c.textAlign = 'left'; c.textBaseline = 'top';
+  if (mode === 'mission') drawSupplyHud(c, s, blink, font);
   if (mode === 'mission' && CAMP.m) drawCampHud(c, s, pad, blink, font);
   else if (mode === 'mission') {
     c.fillText(`PHASE ${phase}  ·  KILLS ${kills}` + (opts.beginner ? '  ·  BEGINNER' : ''), pad, pad); font(12, JP);
@@ -4275,6 +4276,7 @@ function campTick(dt) {
   if (!missionResult) CAMP.m.tick(dt);
 }
 function campClear() {
+  SUPPLY.site = null; SUPPLY.prog = 0; SUPPLY.cd = 0; SUPPLY.lowT = 0;
   TRC.list.length = 0; if (TRC.mesh) TRC.mesh.geometry.setDrawRange(0, 0);
   for (const e of CAMP.escorts) if (e.mesh) scene.remove(e.mesh); for (const a of CAMP.allies) scene.remove(a.mesh); for (const m of CAMP.extras) scene.remove(m);
   if (CAMP.ghost) scene.remove(CAMP.ghost.m);
@@ -4290,6 +4292,7 @@ function startCampaign(i) {
   player.quat.identity(); player.velDir.set(0, 0, -1); player.mesh.visible = true; player.mesh.userData.pylons.forEach(p => p.visible = true);
   curTarget = null; lockT = 0; locked = false; camView = 0; camOffset.set(0, 7, 32); post.first = true;
   M.start();
+  placeSupplySite(player.pos);
   player.velDir.set(0, 0, -1).applyQuaternion(player.quat);
   $('#title').hidden = true; $('#camp').hidden = true; $('#result').hidden = true; $('#pause').hidden = true; $('#touch').hidden = !isTouch; $('#tut').hidden = true;
   initAudio(); setGuide(opts.guide); showMsg(`MISSION ${String(M.id).padStart(2, '0')}  ${M.en.toUpperCase()}`, HUDC, 4, true);
@@ -4473,12 +4476,56 @@ function placeCarrier(x, z, ang) {
   for (const [sx, bz] of [[1, -420], [-1, 380]]) { const e = makeShipMesh('DD'); e.position.set(x + side.x * sx * 260 + fwd.x * bz, 0, z + side.z * sx * 260 + fwd.z * bz); e.rotation.y = ang; scene.add(e); CAMP.extras.push(e); }
   return m;
 }
+/* ---- resupply: a low pass over a friendly base or carrier rearms and patches the jet ---- */
+const SUPPLY = { site: null, spots: {}, prog: 0, cd: 0, lowT: 0 };
+function placeSupplySite(near) {
+  const R = SUPPLY.spots[mapId] || (SUPPLY.spots[mapId] = findRunway(near)); // same spot every sortie on a map, so the levelled pad is reused
+  const ang = Math.atan2(-R.dir.x, -R.dir.z);
+  const site = Object.assign({}, R, { ang, mesh: R.land ? placeAirbase(R.x, R.z, R.h, ang) : placeCarrier(R.x, R.z, ang), top: R.land ? R.h : 21 });
+  SUPPLY.site = site; SUPPLY.prog = 0; SUPPLY.cd = 0; return site;
+}
+function supplyZone() { // horizontal distance to the strip / deck and height above it
+  const S = SUPPLY.site, P = player; if (!S) return null;
+  const dx = P.pos.x - S.x, dz = P.pos.z - S.z, along = dx * S.dir.x + dz * S.dir.z, side = Math.abs(dx * S.dir.z - dz * S.dir.x);
+  const off = S.land ? Math.max(0, Math.abs(along) - 900) + Math.max(0, side - 260) : Math.max(0, Math.hypot(dx, dz) - 260);
+  return { off, agl: P.pos.y - S.top, dist: Math.hypot(dx, dz) };
+}
+function supplyStep(dt) {
+  const S = SUPPLY.site, P = player; if (!S || !P.alive || missionResult) return;
+  SUPPLY.cd = Math.max(0, SUPPLY.cd - dt);
+  const z = supplyZone(), inside = z.off < 1 && z.agl < 200 && z.agl > -5;
+  if (inside && SUPPLY.cd <= 0) {
+    SUPPLY.prog += dt / 2.6;
+    if (SUPPLY.prog >= 1) {
+      SUPPLY.prog = 0; SUPPLY.cd = 45; P.msl = 64; P.gun = 1600; P.flares = 24; P.sp = ST.sp.ammo; P.pylon = [0, 0, 0, 0];
+      P.mesh.userData.pylons.forEach(p => { p.visible = true; p.scale.setScalar(1); }); P.hp = Math.min(P.maxHp, P.hp + P.maxHp * .3);
+      showMsg('RESUPPLY COMPLETE', '#7fc8ff', 3, true); sfxTone(700, 1400, .3, .12, 'triangle');
+      radio(S.land ? 'GROUND CREW' : 'DECK CREW', pick(['補給完了！ 弾薬満載、行ってこい！', '再装填よし！ 応急修理も済ませた。暴れてこい！', 'ミサイル満タンだ。今度は大事に使えよ？']), 3.5, true);
+    }
+  } else SUPPLY.prog = Math.max(0, SUPPLY.prog - dt * .5);
+  if (P.msl <= 8 && SUPPLY.cd <= 0 && (SUPPLY.lowT -= dt) <= 0) { SUPPLY.lowT = 40; radio('NIGHTJAR', `ミサイル残り${P.msl}発。${S.land ? '基地' : '空母'}の上を低空で通過すれば補給できるぞ。`, 4.5); }
+}
+function drawSupplyHud(c, s, blink, font) {
+  const S = SUPPLY.site, P = player; if (!S || !P.alive) return;
+  const z = supplyZone(), col = SUPPLY.cd > 0 ? 'rgba(127,200,255,.45)' : '#7fc8ff';
+  _v6.set(S.x, S.top + 40, S.z); toScreen(_v6, sp);
+  let x = sp.x, y = sp.y; const m = 40 * s, on = !sp.behind && x > m && x < W - m && y > m && y < H - m;
+  if (!on) { let dx = sp.x - W / 2, dy = sp.y - H / 2; if (sp.behind) { dx = -dx; dy = -dy; } const k = Math.min((W / 2 - m) / Math.max(Math.abs(dx), 1), (H / 2 - m) / Math.max(Math.abs(dy), 1)); x = W / 2 + dx * k; y = H / 2 + dy * k; }
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2; const r = 9 * s;
+  c.beginPath(); c.rect(x - r, y - r, r * 2, r * 2); c.moveTo(x - r * .5, y); c.lineTo(x + r * .5, y); c.moveTo(x, y - r * .5); c.lineTo(x, y + r * .5); c.stroke();
+  font(11); c.textAlign = 'center'; c.textBaseline = 'top';
+  c.fillText(SUPPLY.cd > 0 ? `SUPPLY ${Math.ceil(SUPPLY.cd)}s` : `SUPPLY ${(z.dist / 1000).toFixed(1)}km`, x, y + r + 4);
+  if (SUPPLY.prog > 0) { const bw = 260 * s, bx = W / 2 - bw / 2, by = H * .2; c.strokeStyle = '#7fc8ff'; c.strokeRect(bx, by, bw, 10 * s); c.fillStyle = '#7fc8ff'; c.fillRect(bx, by, bw * SUPPLY.prog, 10 * s);
+    font(13); c.fillText(`RESUPPLY  ${Math.round(SUPPLY.prog * 100)}%  — 低空のまま通過！`, W / 2, by + 14 * s); }
+  else if (P.msl <= 8 && SUPPLY.cd <= 0 && blink) { font(14, JP); c.fillStyle = AMBER; c.fillText(`MSL LOW  ·  ${S.land ? '基地' : '空母'}の上を低空(200m以下)で通過して補給`, W / 2, H * .2); }
+  c.textBaseline = 'top'; c.textAlign = 'left'; c.fillStyle = HUDC; c.strokeStyle = HUDC;
+}
 function startBrief(i) {
   startCampaign(i); const M = CAMP.m, P = player;
   BRF.save = { pos: P.pos.clone(), quat: P.quat.clone(), speed: P.speed };
-  const R = findRunway(P.pos); BRF.run = R; const ang = Math.atan2(-R.dir.x, -R.dir.z), ud = P.mesh.userData, gh = (ud.gearH || 2) * P.mesh.scale.y;
-  if (R.land) { placeAirbase(R.x, R.z, R.h, ang); BRF.p0 = new V3(R.x, R.h + .3 + gh, R.z).addScaledVector(R.dir, -800); BRF.len = 1600; }
-  else { const cv = placeCarrier(R.x, R.z, ang); cv.updateMatrixWorld(); BRF.carrier = cv; BRF.p0 = cv.localToWorld(cv.userData.cat.clone()).add(_v1.set(0, gh, 0)); BRF.len = 120; BRF.deckEnd = 110; }
+  const R = SUPPLY.site || placeSupplySite(P.pos); BRF.run = R; const ud = P.mesh.userData, gh = (ud.gearH || 2) * P.mesh.scale.y;
+  if (R.land) { BRF.p0 = new V3(R.x, R.h + .3 + gh, R.z).addScaledVector(R.dir, -800); BRF.len = 1600; }
+  else { const cv = R.mesh; cv.updateMatrixWorld(); BRF.carrier = cv; BRF.p0 = cv.localToWorld(cv.userData.cat.clone()).add(_v1.set(0, gh, 0)); BRF.len = 120; BRF.deckEnd = 110; }
   P.pos.copy(BRF.p0); P.quat.setFromUnitVectors(NEG_Z, R.dir); P.speed = 0; P.throttle = .3; ud.gearSet(1); BRF.gear = 1;
   Object.assign(BRF, { t: 0, li: -1, lt: 0, ending: false, dist: 0, v: 0, pitch: 0, alt: 0, ph: 'spool', phT: 0, fix: null, camInit: false });
   BRF.lines = BRIEF_LINES[M.key || M.id] || [['HQ', M.story]];
@@ -4595,6 +4642,7 @@ function update(dt) {
   for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].removed) enemies.splice(i, 1);
   for (const g of grounds) updateGround(g, dt);
   if (CAMP.m && mode === 'mission') campTick(dt);
+  if (mode === 'mission') supplyStep(dt);
   tracerStep(dt);
   for (const e of enemies) if (e.kind === 'air' && !e.dead && e.dir && e.pos.y < 70) surfaceFx(e.pos, _v4.copy(e.dir).multiplyScalar(e.speed || 200), e.speed || 200, dt, .7);
   updateMissiles(dt); updateBullets(dt); updateEffects(dt); for (const r of trails.tips) r.update(dt); for (const r of trails.con) r.update(dt); hitMarkT = Math.max(0, hitMarkT - dt);
@@ -4747,7 +4795,7 @@ player.pos.set(0, 3000, 14500);
 resize();
 updateLoadoutSummary(); menuFocus();
 // test hook, local dev server only
-if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { get smoke() { return smoke; }, get brf() { return BRF; }, missiles, startBrief, briefStep: (n, dt = 1 / 30) => { for (let i = 0; i < n && state === "brief"; i++) { briefUpdate(dt); smoke.update(dt); fire.update(dt); } return BRF.t; }, setMap, CAMP, startCampaign, grounds, get result() { return missionResult; }, get mt() { return missionTime; }, NET, sun, hemi, post, water, terrain, renderer, scene, camera, sim: (n, dt = 1 / 60, fn) => { for (let i = 0; i < n; i++) { if (fn) fn(); update(dt); smoke.update(dt); fire.update(dt); water.material.uniforms.time.value += dt; updateWake(dt); updateCamera(dt, null); } }, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: c => spawnBoss(c), look: o => { scene.remove(player.mesh); player.mesh = makeJet(o); scene.add(player.mesh); }, get cur() { return curTarget; }, get locked() { return locked; }, damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__sky = { get smoke() { return smoke; }, get supply() { return SUPPLY; }, get brf() { return BRF; }, missiles, startBrief, briefStep: (n, dt = 1 / 30) => { for (let i = 0; i < n && state === "brief"; i++) { briefUpdate(dt); smoke.update(dt); fire.update(dt); } return BRF.t; }, setMap, CAMP, startCampaign, grounds, get result() { return missionResult; }, get mt() { return missionTime; }, NET, sun, hemi, post, water, terrain, renderer, scene, camera, sim: (n, dt = 1 / 60, fn) => { for (let i = 0; i < n; i++) { if (fn) fn(); update(dt); smoke.update(dt); fire.update(dt); water.material.uniforms.time.value += dt; updateWake(dt); updateCamera(dt, null); } }, enemies, puppets, player, nextWave: () => { for (const e of enemies) if (e.alive && !e.pod) destroy(e, true); }, boss: c => spawnBoss(c), look: o => { scene.remove(player.mesh); player.mesh = makeJet(o); scene.add(player.mesh); }, get cur() { return curTarget; }, get locked() { return locked; }, damage: (e, d) => damage(e, d, true), tick: sec => { for (let t = 0; t < sec; t += .05) { if (state === 'play') update(.05); else if (state === 'mlobby') netUpdate(.05); } return [NET.view && NET.view.ph, NET.view && NET.view.wave, enemies.filter(e => e.alive).length]; } };
 requestAnimationFrame(frame);
 })();
 </script>
