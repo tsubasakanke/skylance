@@ -498,19 +498,19 @@ const flash = new THREE.PointLight(0xffa860, 0, 3000, 2); scene.add(flash);
 
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { sunDir: { value: sunDir }, hor: { value: FOGC }, sunK: { value: 1 }, zen: { value: new THREE.Color(0.15, 0.34, 0.66) }, sunC: { value: new THREE.Color(1.0, 0.9, 0.72) } },
+  uniforms: { sunDir: { value: sunDir }, hor: { value: FOGC }, sunK: { value: 1 }, below: { value: 0 }, zen: { value: new THREE.Color(0.15, 0.34, 0.66) }, sunC: { value: new THREE.Color(1.0, 0.9, 0.72) } },
   vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `uniform vec3 sunDir; uniform vec3 hor; uniform float sunK; uniform vec3 zen; uniform vec3 sunC; varying vec3 vDir;
+  fragmentShader: `uniform vec3 sunDir; uniform vec3 hor; uniform float sunK; uniform float below; uniform vec3 zen; uniform vec3 sunC; varying vec3 vDir;
     void main(){ vec3 d = normalize(vDir); float y = d.y;
       vec3 col = mix(hor, zen, pow(clamp(y,0.0,1.0), 0.5));
-      if (y < 0.0) col = mix(hor * 0.9, vec3(0.1,0.13,0.12), clamp(-y*14.0,0.0,1.0)); // below the horizon: dark land/sea, so reflections show a horizon line
+      if (y < 0.0) col = mix(hor, vec3(0.1,0.13,0.12), clamp(-y*14.0,0.0,1.0) * below); // below the horizon: dark land/sea, so reflections show a horizon line
       float s = max(dot(d, sunDir), 0.0);
       col += sunC * (pow(s, 1400.0) * 14.0 * sunK + pow(s, 60.0) * 0.45 * (0.3 + 0.7 * sunK) + pow(s, 6.0) * 0.14);
       gl_FragColor = linearToOutputTexel(vec4(col, 1.0)); }`
 });
 const sky = new THREE.Mesh(new THREE.SphereGeometry(70000, 32, 16), skyMat); sky.renderOrder = -1; scene.add(sky);
 let envSky = null;
-function makeEnv() { try { if (!envSky) { envSky = skyMat.clone(); envSky.uniforms.sunK.value = 0; } // the sun itself is the directional light; keep it out of reflections
+function makeEnv() { try { if (!envSky) { envSky = skyMat.clone(); envSky.uniforms.sunK.value = 0; envSky.uniforms.below.value = 1; } // the sun itself is the directional light; keep it out of reflections
   envSky.uniforms.zen.value.copy(skyMat.uniforms.zen.value); envSky.uniforms.hor.value.copy(FOGC); envSky.uniforms.sunDir.value.copy(sunDir); envSky.uniforms.sunC.value.copy(skyMat.uniforms.sunC.value);
   const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), envSky));
   const pm = new THREE.PMREMGenerator(renderer); const old = scene.environment; scene.environment = pm.fromScene(envScene, 0.02, 1, 2000).texture; pm.dispose(); if (old) old.dispose(); } catch (e) {} }
@@ -531,20 +531,27 @@ function pfbm(x, y, p, o) { let s = 0, a = .5, n = 0; for (let i = 0; i < o; i++
 let terrain, water, minimap, DETAIL;
 const TERRAIN_VS_HEAD = `attribute vec2 sv; attribute float field; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;`;
 function terrainShader(sh) {
-  sh.uniforms.lowQ = LOWQ;
+  sh.uniforms.lowQ = LOWQ; sh.uniforms.rockC = TERRAIN_ROCK;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + TERRAIN_VS_HEAD)
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n vSv = sv; vField = field; vWp = (modelMatrix * vec4(transformed, 1.0)).xyz; vWn = normal;');
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float lowQ; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;')
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float lowQ; uniform vec3 rockC; varying vec2 vSv; varying float vField; varying vec3 vWp; varying vec3 vWn;')
     .replace('#include <map_fragment>', `
       float tDist = length(vWp - cameraPosition); vec2 P = vWp.xz;
+      // triplanar: cliffs take the texture from the side instead of smearing the top-down projection down the wall
+      vec3 fN = normalize(cross(dFdx(vWp), dFdy(vWp))); if (fN.y < 0.0) fN = -fN; fN = normalize(mix(normalize(vWn), fN, 0.55)); // true facet normal: smooth vertex normals hide how steep a cliff is
+      vec3 tw = pow(abs(fN), vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
       float d2 = 0.5, d3 = 0.5, d4 = 0.5;
-      if (lowQ < 0.5) { d2 = texture2D(map, P / 420.0).r; d3 = texture2D(map, P / 1800.0).r; d4 = texture2D(map, P / 6000.0).g; }
-      float slope = 1.0 - vWn.y, rockK = smoothstep(0.22, 0.45, slope);
+      if (lowQ < 0.5) {
+        d2 = texture2D(map, P / 420.0).r * tw.y + texture2D(map, vWp.zy / 420.0).r * tw.x + texture2D(map, vWp.xy / 420.0).r * tw.z;
+        d3 = texture2D(map, P / 1800.0).r * tw.y + texture2D(map, vWp.zy / 900.0).r * tw.x + texture2D(map, vWp.xy / 900.0).r * tw.z;
+        d4 = texture2D(map, P / 6000.0).g; }
+      float slope = 1.0 - fN.y, rockK = smoothstep(0.28, 0.55, slope);
       float strata = 0.5 + 0.5 * sin(vWp.y / 26.0 + d3 * 6.0); // broad, smooth rock banding
       float k = (0.88 + 0.24 * d2) * (0.84 + 0.32 * d3) * (0.86 + 0.28 * d4);
-      k *= mix(1.0, 0.92 + 0.14 * strata, rockK);
+      float rockShade = 0.78 + 0.34 * strata + 0.2 * (d2 - 0.5);
       diffuseColor.rgb *= k;`)
     .replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = mix(diffuseColor.rgb, rockC * k * rockShade, rockK); // per-pixel rock on steep faces
       if (vField > 0.01) {
         vec2 q = mat2(0.94, 0.34, -0.34, 0.94) * P; vec2 fs = vec2(330.0, 210.0); vec2 cell = floor(q / fs); vec2 f = fract(q / fs);
         float h = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
@@ -557,19 +564,20 @@ function terrainShader(sh) {
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       if (lowQ < 0.5) {
         float e2 = texture2D(map, (P + vec2(18.0, 0.0)) / 420.0).r, e3 = texture2D(map, (P + vec2(0.0, 18.0)) / 420.0).r;
-        vec2 g = vec2(e2 - d2, e3 - d2) * (0.8 + rockK * 1.6);
+        vec2 g = vec2(e2 - d2, e3 - d2) * 0.8 * (1.0 - rockK);
         vec3 wn = normalize(vWn + vec3(-g.x, 0.0, -g.y) * (1.0 - smoothstep(2000.0, 8000.0, tDist)));
         normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
       }`)
     .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
       reflectedLight.directDiffuse *= vSv.x; reflectedLight.directSpecular *= vSv.x; reflectedLight.indirectDiffuse *= vSv.y;`);
 }
+const TERRAIN_ROCK = { value: new THREE.Color(0x766c60) };
 const PALS = {
   green: { sand: 0xd2bf8e, grass: 0x587a38, forest: 0x2a4524, dry: 0x968d52, rock: 0x766c60, rock2: 0x4e4943, snow: 0xf4f7fb, fields: true },
   tropic: { sand: 0xeadcae, grass: 0x5c9a3c, forest: 0x2c6228, dry: 0x8fa04e, rock: 0x7a7266, rock2: 0x585048, snow: 0xf4f7fb, snowLine: 2600 },
   rock: { sand: 0xb8ad8e, grass: 0x6a7448, forest: 0x3b4630, dry: 0x857e60, rock: 0x6c6862, rock2: 0x4a4744, snow: 0xeef2f6, snowLine: 1400 },
   desert: { sand: 0xd8b07a, grass: 0xc79260, forest: 0xa86a42, dry: 0xd8a86e, rock: 0x9a5a3c, rock2: 0x74402c, snow: 0xd8a86e, snowLine: 9000 },
-  snow: { sand: 0x9aa2a8, grass: 0xe6edf3, forest: 0x7d8790, dry: 0xd4dde5, rock: 0x5a636c, rock2: 0x434a52, snow: 0xf6f9fc, snowLine: 300 }
+  snow: { sand: 0x9aa2a8, grass: 0xe6edf3, forest: 0x7d8790, dry: 0xd4dde5, rock: 0x4c545c, rock2: 0x3c434a, snow: 0xf6f9fc, snowLine: 300 }
 };
 // sky presets: zenith, horizon/fog, sun direction, colours and fill light
 const SKIES = {
@@ -609,7 +617,7 @@ function buildTerrain() {
   for (let i = 0; i < pos.count; i++) { const h = rawHeight(pos.getX(i), pos.getZ(i)); HG[i] = h; pos.setY(i, h); }
   geo.computeVertexNormals();
   const nrm = geo.attributes.normal, cols = new Float32Array(pos.count * 3), sv = new Float32Array(pos.count * 2), field = new Float32Array(pos.count);
-  const P = PALS[MAP.pal] || PALS.green, C = k => new THREE.Color(P[k]);
+  const P = PALS[MAP.pal] || PALS.green, C = k => new THREE.Color(P[k]); TERRAIN_ROCK.value.set(P.rock);
   const cSand = C('sand'), cGrass = C('grass'), cForest = C('forest'), cDry = C('dry'), cRock = C('rock'), cRock2 = C('rock2'), cSnow = C('snow'), cDeep = new THREE.Color(0x2b4650), c = new THREE.Color();
   const sh = Math.hypot(sunDir.x, sunDir.z), sx = sunDir.x / sh, sz = sunDir.z / sh, tanS = sunDir.y / sh;
   for (let i = 0; i < pos.count; i++) {
@@ -636,7 +644,7 @@ function buildTerrain() {
   DETAIL = new THREE.CanvasTexture(noiseCanvas(256, (x, y) => { const a = pfbm(x / 32, y / 32, 8, 3), b = pfbm(x / 64 + 7, y / 64 + 3, 4, 3); return [a * 255, b * 255, 128]; }));
   DETAIL.wrapS = DETAIL.wrapT = THREE.RepeatWrapping; DETAIL.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, map: DETAIL, roughness: 0.92, metalness: 0, envMapIntensity: .5 });
-  tmat.onBeforeCompile = terrainShader;
+  tmat.onBeforeCompile = terrainShader; tmat.extensions = { derivatives: true };
   terrain = new THREE.Mesh(geo, tmat); terrain.receiveShadow = true;
   scene.add(terrain);
 
@@ -852,8 +860,8 @@ const SKIN = (() => {
       g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${Math.abs(v) / 900})`; g.fillRect(x, y, w, hh); }
     if (camo) for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(0,0,0,${rand(.08, .2)})`; g.beginPath(); const x = rand(0, W), y = rand(0, H); g.moveTo(x, y); for (let k = 0; k < 5; k++) g.lineTo(x + rand(-140, 140), y + rand(-70, 70)); g.closePath(); g.fill(); }
     for (let i = 0; i < 2600; i++) { const a = rand(0, .05), x = rand(0, W), y = rand(0, H), w = rand(2, 30), hh = rand(1, 6); g.fillStyle = `rgba(0,0,0,${a})`; g.fillRect(x, y, w, hh); r.fillStyle = `rgba(255,255,255,${a * 2.2})`; r.fillRect(x, y, w, hh); } // grime: darker and duller
-    const line = (fn) => { for (const [ctx, st, lw] of [[g, 'rgba(30,34,38,.55)', 1.4], [h, 'rgba(0,0,0,.75)', 1.5], [r, 'rgba(255,255,255,.5)', 2]]) { ctx.strokeStyle = st; ctx.lineWidth = lw; fn(ctx); } };
-    for (let i = 0; i < 28; i++) { const y = rand(0, H) | 0, dy = rand(-6, 6); line(ctx => { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + dy); ctx.stroke(); }); }
+    const line = (fn) => { for (const [ctx, st, lw] of [[g, 'rgba(30,34,38,.32)', 1.1], [h, 'rgba(0,0,0,.5)', 1.2], [r, 'rgba(255,255,255,.4)', 1.6]]) { ctx.strokeStyle = st; ctx.lineWidth = lw; fn(ctx); } };
+    for (let i = 0; i < 9; i++) { const y = (i + .5) / 9 * H + rand(-12, 12) | 0; line(ctx => { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }); }
     for (let i = 0; i < 40; i++) { const x = rand(0, W) | 0, y = rand(0, H) | 0, hh = rand(30, 200); line(ctx => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + hh); ctx.stroke(); }); }
     for (let i = 0; i < 26; i++) { const x = rand(0, 1000), y = rand(0, 490), w = rand(20, 90), hh = rand(14, 50); line(ctx => ctx.strokeRect(x, y, w, hh)); } // access panels
     for (let i = 0; i < 2400; i++) { const x = rand(0, W), y = rand(0, H); g.fillStyle = 'rgba(20,22,24,.5)'; g.fillRect(x, y, 1.3, 1.3); h.fillStyle = 'rgba(0,0,0,.5)'; h.fillRect(x, y, 1.6, 1.6); } // fasteners
@@ -941,19 +949,21 @@ function addGear(g, u, D, shape, metal, skinM) {
   for (const l of legs) l.root.userData.y0 = l.root.position.y;
   u.gearSet(0);
 }
+const DUCT_M = new THREE.MeshStandardMaterial({ color: 0x2a2c2f, roughness: .7, metalness: .3, side: THREE.DoubleSide }), DUCT_DEEP = new THREE.MeshBasicMaterial({ color: 0x050506 }), FAN_M = new THREE.MeshStandardMaterial({ color: 0x3a3c40, metalness: .8, roughness: .35 });
+const NOZ_LINER = new THREE.MeshStandardMaterial({ color: 0x3b3430, roughness: .55, metalness: .7, side: THREE.DoubleSide });
 function makeJet(o) {
   const shape = AF[o.shape] ? o.shape : o.shape === 'wing' ? 'wing' : 'classic', D = AF[shape], g = new THREE.Group();
   const enemy = !!o.enemy, skin = enemy ? SKIN.camo : SKIN.plain;
   const paint = (color, rough, metal) => Object.assign(new THREE.MeshPhysicalMaterial({ color, map: skin.map, normalMap: skin.nrm, normalScale: new THREE.Vector2(.45, .45), roughnessMap: skin.rough, roughness: rough, metalness: metal,
     clearcoat: enemy ? .2 : .35, clearcoatRoughness: enemy ? .3 : .14, envMapIntensity: .7, reflectivity: .35 }), { onBeforeCompile: capGlint });
-  const paint0 = paint, lowPaint = (...a) => { const m = paint0(...a); m.userData.hi = { n: m.normalMap, r: m.roughnessMap, c: m.clearcoat }; if (quality === 'low') { m.normalMap = m.roughnessMap = null; m.clearcoat = 0; m.roughness = Math.max(m.roughness, .6); } return m; };
+  const paint0 = paint, lowPaint = (...a) => { const m = paint0(...a); m.side = THREE.DoubleSide; m.userData.hi = { n: m.normalMap, r: m.roughnessMap, c: m.clearcoat }; if (quality === 'low') { m.normalMap = m.roughnessMap = null; m.clearcoat = 0; m.roughness = Math.max(m.roughness, .6); } return m; };
   const body = lowPaint(o.body, enemy ? 1.15 : 1.0, .2), dark = lowPaint(o.dark, 1.1, .2), tailM = lowPaint(o.tail, 1.0, .2);
   const surf = body;
   const radome = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.body).multiplyScalar(.85), metalness: .1, roughness: .7 });
   const glass = new THREE.MeshStandardMaterial({ color: D && D.canopy && D.canopy.gold ? 0x6a5a22 : 0x18242c, metalness: .95, roughness: .06, transparent: true, opacity: .88, emissive: 0x05090c });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x5a5b5e, metalness: .95, roughness: .3, envMapIntensity: 1.4 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x5a5b5e, metalness: .95, roughness: .3, envMapIntensity: 1.4, side: THREE.DoubleSide });
   const black = new THREE.MeshBasicMaterial({ color: 0x050607 });
-  const plate = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.dark).multiplyScalar(.7), map: skin.map, normalMap: skin.nrm, metalness: .6, roughness: .45, envMapIntensity: 1.2 });
+  const plate = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.dark).multiplyScalar(.7), map: skin.map, normalMap: skin.nrm, metalness: .6, roughness: .45, envMapIntensity: 1.2, side: THREE.DoubleSide });
   const u = { ail: {}, flap: {}, stab: {}, rud: {}, noz: [], flames: [], cores: [], diamonds: [], pylons: [], st: { p: 0, r: 0, y: 0, b: 0, f: 0 }, fm: 1, canard: false, vapor: [] };
   const dummy = () => { const p = new THREE.Group(); g.add(p); return p; };
   const mesh = (geo, m, parent = g) => { const x = new THREE.Mesh(geo, m); parent.add(x); return x; };
@@ -982,11 +992,22 @@ function makeJet(o) {
       const pg = new THREE.CylinderGeometry(r * .92, r * 1.04, 1.4, 24, 1, true); pg.rotateX(-Math.PI / 2); pg.translate(0, 0, .7);
       const pm = mesh(pg, new THREE.MeshStandardMaterial({ color: 0x5a5b5d, metalness: .85, roughness: .45, side: THREE.DoubleSide, map: PETALS }), nz);
     }
-    const throat = new THREE.Mesh(new THREE.CircleGeometry(r * .85, 20), new THREE.MeshBasicMaterial({ color: 0x0a0806 })); throat.position.z = .25; throat.scale.y = flat ? .5 : 1; nz.add(throat);
-    const hot = new THREE.Mesh(new THREE.CircleGeometry(r * .7, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, .55, .15), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); hot.position.z = .3; hot.scale.y = flat ? .5 : 1; nz.add(hot);
+    const liner = new THREE.CylinderGeometry(r * .8, r * .78, 1.1, 20, 1, true); liner.rotateX(-Math.PI / 2); liner.translate(0, 0, .6);
+    const ln = mesh(liner, NOZ_LINER, nz); ln.scale.y = flat ? .5 : 1;
+    for (const [zz, rr] of [[.35, .55], [.2, .3]]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(r * rr, r * .035, 6, 20), NOZ_LINER); ring.position.z = zz; ring.scale.y = flat ? .5 : 1; nz.add(ring); } // flame holders
+    const throat = new THREE.Mesh(new THREE.CircleGeometry(r * .8, 20), new THREE.MeshBasicMaterial({ color: 0x0a0806 })); throat.position.z = .08; throat.scale.y = flat ? .5 : 1; nz.add(throat);
+    const hot = new THREE.Mesh(new THREE.CircleGeometry(r * .62, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, .55, .15), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); hot.position.z = .12; hot.scale.y = flat ? .5 : 1; nz.add(hot);
     const fl = makeFlame(r * (flat ? 1.1 : .95), flat); fl.position.z = flat ? 1.35 : 1.3; nz.add(fl);
     const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(2.4, 1.2, .5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); gl.position.z = 1.6; nz.add(gl); u.diamonds.push(gl);
     u.noz.push(nz); u.flames.push(fl); u.cores.push(hot);
+  };
+  const duct = (x, y, z, w, h, e, rotZ = 0, parent = g) => {
+    const sh = new THREE.Shape(), n = 28; for (let k = 0; k <= n; k++) { const a = k / n * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a); const px = w * Math.sign(c) * Math.pow(Math.abs(c), 2 / e), py = h * Math.sign(s2) * Math.pow(Math.abs(s2), 2 / e); k ? sh.lineTo(px, py) : sh.moveTo(px, py); }
+    const dg = new THREE.Group(); dg.position.set(x, y, z); dg.rotation.z = rotZ; parent.add(dg);
+    const wall = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: .9, bevelEnabled: true, bevelThickness: .05, bevelSize: .05, bevelSegments: 2, curveSegments: 4 }), DUCT_M); wall.scale.set(.92, .92, 1); dg.add(wall); // inner duct walls
+    const inner = new THREE.Mesh(new THREE.ShapeGeometry(sh), DUCT_DEEP); inner.scale.set(.8, .8, 1); inner.position.z = .95; dg.add(inner); // compressor face, deep inside
+    const fan = new THREE.Mesh(new THREE.CircleGeometry(Math.min(w, h) * .55, 16), FAN_M); fan.position.z = .9; dg.add(fan);
+    return dg;
   };
   const missileAt = (x, y, z) => { const m = makeMissileMesh(); m.position.set(x, y, z); g.add(m); u.pylons.push(m); };
 
@@ -1030,10 +1051,10 @@ function makeJet(o) {
       // intakes
       if (D.intake && !D.intake.chin) { const I = D.intake;
         mesh(loftGeo([{ z: I.z0, w: I.w, h: I.h, x: I.x, y: I.y, e: I.e }, { z: lerp(I.z0, I.z1, .5), w: I.w * .95, h: I.h * .95, x: I.x - .05, y: I.y, e: I.e }, { z: I.z1, w: I.w * .4, h: I.h * .6, x: I.x - .45, y: I.y, e: I.e }], 20), body, side);
-        const lip = box(I.w * 1.75, I.h * 1.75, .02, black, I.x, I.y, I.z0 + .12, side); if (I.caret) lip.rotation.z = .35; }
+        duct(I.x, I.y, I.z0 + .03, I.w * .92, I.h * .92, I.e, I.caret ? .35 : 0, side); }
       if (D.nacelles) { const N = D.nacelles;
         mesh(loftGeo([{ z: N.z0, w: N.w * .9, h: N.h, x: N.x, y: N.y, e: 4 }, { z: N.z0 + 2.5, w: N.w, h: N.h, x: N.x, y: N.y, e: 3 }, { z: N.z1 - 2, w: N.w * .95, h: N.h * .9, x: N.x, y: N.y, e: 2.4 }, { z: N.z1, w: N.w * .85, h: N.h * .8, x: N.x, y: N.y }], 24), body, side);
-        box(N.w * 1.7, N.h * 1.8, .02, black, N.x, N.y, N.z0 + .1, side); }
+        duct(N.x, N.y, N.z0 + .03, N.w * .82, N.h * .9, 4, 0, side); }
       if (D.cft) mesh(loftGeo([{ z: -1.5, w: .1, h: .1, x: 2.15, y: -.05 }, { z: .2, w: .42, h: .48, x: 2.25, y: -.05 }, { z: 5.0, w: .45, h: .5, x: 2.25, y: -.05 }, { z: 6.8, w: .1, h: .1, x: 2.2, y: -.05 }], 18), body, side);
       if (D.booms) mesh(loftGeo([{ z: 4, w: .25, h: .25, x: 1.6, y: -.1 }, { z: 7, w: .42, h: .38, x: 1.6, y: -.1 }, { z: 10.6, w: .35, h: .3, x: 1.6, y: -.1 }, { z: 11.6, w: .1, h: .1, x: 1.6, y: -.1 }], 16), body, side);
       if (D.lerx) mesh(wingGeo([.9, .25, -7.2, -1.0], [1.8, .1, -1.2, -.9], .03, false), body, side);
@@ -1068,7 +1089,7 @@ function makeJet(o) {
     }
     if (D.intake && D.intake.chin) { const I = D.intake;
       mesh(loftGeo([{ z: I.z0, w: I.w, h: I.h, y: I.y, e: I.e }, { z: lerp(I.z0, I.z1, .6), w: I.w * .95, h: I.h, y: I.y + .1, e: I.e }, { z: I.z1, w: I.w * .6, h: I.h * .5, y: I.y + .5, e: I.e }], 20), body);
-      box(I.w * 1.85, I.h * 1.85, .02, black, 0, I.y, I.z0 + .1); }
+      duct(0, I.y, I.z0 + .03, I.w * .92, I.h * .92, I.e); }
     if (D.finC) { const F = D.finC; const fg = pivot(g, 0, F.y, 0);
       const cutR = F.rt[2] - .8, cutT = F.tp[2] - .3;
       mesh(finGeo([F.rt[0], F.rt[1], cutR], [F.tp[0], F.tp[1], cutT], .045), tailM, fg);
@@ -1146,7 +1167,7 @@ function animateJet(j, pitch, roll, yaw, brake, flapAmt, throttle, dt, t, g) {
     u.noz[i].rotation.x = -s.p * .14;
     const f = u.flames[i], U = f.material.uniforms; U.time.value = t; U.ab.value = ab; U.thr.value = throttle;
     f.scale.z = len * (.94 + Math.random() * .1); f.visible = throttle > .25;
-    u.cores[i].material.color.setRGB(1.2 + ab * 2.2, .45 + ab * .9, .12 + ab * .5); u.cores[i].material.opacity = .35 + throttle * .65;
+    u.cores[i].material.color.setRGB(.5 + throttle * .9 + ab * 2.2, .16 + throttle * .3 + ab * .9, .05 + throttle * .08 + ab * .5); u.cores[i].material.opacity = .12 + throttle * .45 + ab * .4;
     const gl = u.diamonds[i]; if (gl) { gl.scale.setScalar((.3 + ab * 1.25) * (.9 + Math.random() * .2)); gl.material.color.setRGB(1 + ab * 1.1, .5 + ab * .65, .2 + ab * .45); gl.material.opacity = .1 + throttle * .2 + ab * .35; }
   }
   // condensation over the wings when pulling hard
