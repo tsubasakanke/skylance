@@ -270,7 +270,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
           <label for="optVol" class="vol">音量 <input type="range" id="optVol" min="0" max="100" step="5" value="80"> <output id="optVolV">80</output></label>
         </div>
         <div class="keys-cfg desk-only">
-          <div class="kc-head"><b>キー設定</b><small>ボタンを押して、割り当てたいキーを押す（Esc でキャンセル、Delete で未割当）</small><button class="btn ghost sm" id="kbReset" type="button">初期設定に戻す</button></div>
+          <div class="kc-head"><b>キー設定</b><small>ボタンを押して、割り当てたいキーかマウスのボタンを押す（Esc でキャンセル、Delete で未割当）</small><button class="btn ghost sm" id="kbReset" type="button">初期設定に戻す</button></div>
           <div id="kbList"></div>
           <p class="note" id="kbMsg" role="status"></p>
         </div>
@@ -1483,7 +1483,7 @@ loadBinds();
 const isDown = a => BIND[a].some(c => c && keys[c]);
 const hasKey = (a, code) => !!code && BIND[a].includes(code);
 // readable name for a KeyboardEvent.code
-function keyName(code) { if (!code) return '―'; if (/^Key[A-Z]$/.test(code)) return code.slice(3); if (/^Digit\d$/.test(code)) return code.slice(5);
+function keyName(code) { if (!code) return '―'; if (/^Mouse\d$/.test(code)) return ['左クリック', '中クリック', '右クリック', 'サイド1', 'サイド2'][+code[5]] || 'マウス' + code[5]; if (/^Key[A-Z]$/.test(code)) return code.slice(3); if (/^Digit\d$/.test(code)) return code.slice(5);
   const m = { Space: 'Space', ShiftLeft: '左Shift', ShiftRight: '右Shift', ControlLeft: '左Ctrl', ControlRight: '右Ctrl', AltLeft: '左Alt', AltRight: '右Alt', Escape: 'Esc', Tab: 'Tab', Enter: 'Enter', Backspace: 'BS',
     ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`' };
   return m[code] || (/^Numpad/.test(code) ? 'テンキー' + code.slice(6) : code); }
@@ -1496,6 +1496,19 @@ addEventListener('keydown', e => {
   keys[e.code] = true; if (!e.repeat) onPress(e.code);
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+// mouse buttons: Mouse0 left, Mouse1 middle, Mouse2 right, Mouse3/4 side buttons — handled exactly like keys
+const MOUSE_UI = '#title,#hangar,#camp,#lobby,#mroom,#pause,#result,#tut,#brief,button,input,select,label,a,.kb-key';
+addEventListener('mousedown', e => {
+  const code = 'Mouse' + e.button;
+  if (KB.capture) { e.preventDefault(); e.stopPropagation(); kbCapture({ code, repeat: false, preventDefault() {}, stopPropagation() {} }); return; }
+  if (e.target.closest && e.target.closest(MOUSE_UI) || !(state === 'play' || state === 'paused')) return; // menus keep their normal clicks
+  if (!isBound(code)) return;
+  e.preventDefault(); keys[code] = true; onPress(code);
+}, true);
+addEventListener('mouseup', e => { keys['Mouse' + e.button] = false; });
+addEventListener('contextmenu', e => { if (state === 'play' || state === 'paused' || KB.capture) e.preventDefault(); });
+addEventListener('auxclick', e => { if (state === 'play' && isBound('Mouse' + e.button)) e.preventDefault(); });
+const isBound = code => ACTIONS.some(([id]) => BIND[id].includes(code));
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') pauseGame(); });
 function onPress(code) {
   if (hasKey('pause', code) || code === 'Escape' && state === 'paused') { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); return; }
@@ -3050,7 +3063,7 @@ function renderKeyCfg() {
   const box = $('#kbList'); if (!box) return; box.textContent = '';
   for (const [id, label] of ACTIONS) { const row = document.createElement('div'); row.className = 'kb-row'; const sp = document.createElement('span'); sp.textContent = label; row.append(sp);
     for (let slot = 0; slot < 2; slot++) { const b = document.createElement('button'); b.type = 'button'; b.className = 'kb-key'; b.textContent = keyName(BIND[id][slot]); b.title = slot ? 'サブキー' : 'メインキー';
-      b.addEventListener('click', () => { if (KB.capture) kbStop(); KB.capture = { id, slot, el: b }; b.classList.add('wait'); b.textContent = '押して…'; $('#kbMsg').textContent = `「${label}」のキーを押してね（Esc でキャンセル / Delete で未割当）`; });
+      b.addEventListener('click', () => { if (KB.capture) kbStop(); KB.capture = { id, slot, el: b }; b.classList.add('wait'); b.textContent = '押して…'; $('#kbMsg').textContent = `「${label}」のキーを押してね（マウスのボタンもOK / Esc でキャンセル / Delete で未割当）`; });
       row.append(b); }
     box.append(row); }
 }
@@ -3059,7 +3072,7 @@ function kbCapture(e) {
   e.preventDefault(); e.stopPropagation(); const C = KB.capture; if (!C || e.repeat) return;
   if (e.code === 'Escape') { kbStop(); renderKeyCfg(); $('#kbMsg').textContent = ''; return; }
   const code = e.code === 'Delete' || e.code === 'Backspace' ? '' : e.code, msg = $('#kbMsg');
-  if (['MetaLeft', 'MetaRight', 'ContextMenu'].includes(code)) { msg.textContent = 'そのキーは使えないよ。別のキーを押してね'; return; }
+  if (['MetaLeft', 'MetaRight', 'ContextMenu'].includes(code) || (code === 'Mouse0' && C.el && false)) { msg.textContent = 'そのキーは使えないよ。別のキーを押してね'; return; }
   let swap = '';
   if (code) for (const [id, label] of ACTIONS) for (let s2 = 0; s2 < 2; s2++) if (BIND[id][s2] === code && !(id === C.id && s2 === C.slot)) { // taken: swap with whatever this slot held
     BIND[id][s2] = BIND[C.id][C.slot]; swap = `「${label}」と入れ替えたよ`; }
