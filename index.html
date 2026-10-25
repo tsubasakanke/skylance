@@ -187,6 +187,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 .cl-ok{font:700 10px/1 var(--display);letter-spacing:.1em;color:#0b1a12;background:var(--hud);padding:3px 5px}
 .camp-brief .cb-story{font-size:14px;line-height:1.85;margin:0 0 14px}
 @media (max-width:720px){.camp-body{grid-template-columns:1fr}.camp-list{flex-direction:row;flex-wrap:wrap}.cl{flex:1 1 45%}}
+.vol{display:flex;align-items:center;gap:10px}.vol input[type=range]{flex:1;accent-color:var(--hud);min-width:120px}.vol output{font-family:var(--mono,monospace);min-width:2.6em;text-align:right}
 </style>
 
 </head>
@@ -259,6 +260,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
           <label for="optLock">ロックオン <select id="optLock"><option value="auto">自動</option><option value="manual">切り替え式（R/X）</option></select></label>
           <label for="optQuality">描画モード <select id="optQuality"><option value="high">グラフィック重視</option><option value="low">FPS重視</option></select></label>
           <label for="optFps"><input type="checkbox" id="optFps"> FPSを表示</label>
+          <label for="optVol" class="vol">音量 <input type="range" id="optVol" min="0" max="100" step="5" value="80"> <output id="optVolV">80</output></label>
         </div>
         <div class="keys desk-only">
           <div><kbd>W</kbd><kbd>S</kbd>ピッチ</div><div><kbd>A</kbd><kbd>D</kbd>ロール</div>
@@ -282,6 +284,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
     <p class="verdict">一時停止中</p>
     <div class="stack"><button class="btn ghost sm" id="guideBtn">操作ガイドを表示（H）</button>
     <button class="btn ghost sm" id="qualityBtn">描画モード：グラフィック重視</button>
+    <label class="vol" for="pauseVol">音量 <input type="range" id="pauseVol" min="0" max="100" step="5" value="80"> <output id="pauseVolV">80</output></label>
     <div class="row">
       <button class="btn" id="resumeBtn">再開</button>
       <button class="btn ghost" id="quitBtn">リタイア</button>
@@ -1402,12 +1405,12 @@ function renderFrame(dt) {
 }
 
 /* ================= audio ================= */
-const SND = { ctx: null, muted: false };
+const SND = { ctx: null, muted: false, vol: (() => { try { const v = JSON.parse(localStorage.getItem('skylance-vol')); return v == null ? .8 : clamp(+v, 0, 1); } catch (e) { return .8; } })() };
 function initAudio() {
   if (SND.ctx) { SND.ctx.resume(); return; }
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)(); SND.ctx = ctx;
-    const master = ctx.createGain(); master.gain.value = .55; master.connect(ctx.destination); SND.master = master;
+    const master = ctx.createGain(); master.gain.value = SND.muted ? 0 : .55 * SND.vol; master.connect(ctx.destination); SND.master = master;
     const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; SND.noise = nb;
     const loopNoise = () => { const s = ctx.createBufferSource(); s.buffer = nb; s.loop = true; s.start(); return s; };
     const engF = ctx.createBiquadFilter(); engF.type = 'lowpass'; engF.frequency.value = 500;
@@ -1457,7 +1460,13 @@ function updateAudio() {
   SND.alertG.gain.setTargetAtTime(alertV, t, .01);
   SND.warnG.gain.setTargetAtTime(alive && !alertLevel && lockWarn ? ((Math.floor(now / 260) % 2) ? .03 : 0) : 0, t, .01);
 }
-function setMute(m) { SND.muted = m; if (SND.master) SND.master.gain.value = m ? 0 : .55; }
+function setMute(m) { SND.muted = m; if (SND.master) SND.master.gain.value = m ? 0 : .55 * SND.vol; }
+// volume: one value shared by the settings panel and the pause menu, remembered between visits
+function setVolume(v) { SND.vol = clamp(v, 0, 1); if (SND.master && !SND.muted) SND.master.gain.setTargetAtTime(.55 * SND.vol, SND.ctx.currentTime, .03);
+  const pc = Math.round(SND.vol * 100); for (const [i, o] of [['#optVol', '#optVolV'], ['#pauseVol', '#pauseVolV']]) { const el = $(i), out = $(o); if (el && +el.value !== pc) el.value = pc; if (out) out.textContent = pc; }
+  try { localStorage.setItem('skylance-vol', JSON.stringify(SND.vol)); } catch (e) {} }
+for (const id of ['#optVol', '#pauseVol']) { const el = $(id); if (el) el.addEventListener('input', () => { setVolume(el.value / 100); if (SND.ctx && SND.ctx.state === 'running' && state !== 'paused') sfxTone(880, 880, .06, .05, 'sine'); }); }
+setVolume(SND.vol);
 
 /* ================= input ================= */
 const keys = {};
