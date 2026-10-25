@@ -188,6 +188,13 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
 .camp-brief .cb-story{font-size:14px;line-height:1.85;margin:0 0 14px}
 @media (max-width:720px){.camp-body{grid-template-columns:1fr}.camp-list{flex-direction:row;flex-wrap:wrap}.cl{flex:1 1 45%}}
 .vol{display:flex;align-items:center;gap:10px}.vol input[type=range]{flex:1;accent-color:var(--hud);min-width:120px}.vol output{font-family:var(--mono,monospace);min-width:2.6em;text-align:right}
+.keys-cfg{margin-top:12px;border-top:1px solid var(--hud-dim);padding-top:10px}
+.kc-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:8px}.kc-head b{font:700 14px var(--display);letter-spacing:.08em}.kc-head small{flex:1 1 220px;color:var(--muted);font-size:11px;line-height:1.5}
+#kbList{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;max-height:230px;overflow:auto;padding-right:4px}
+.kb-row{display:flex;align-items:center;gap:6px;font-size:12.5px}.kb-row>span{flex:1;min-width:0}
+.kb-key{appearance:none;font:12px var(--mono);color:var(--ink);background:rgba(141,255,180,.06);border:1px solid var(--hud-dim);padding:3px 6px;min-width:62px;cursor:pointer}
+.kb-key:hover,.kb-key:focus-visible{border-color:var(--hud);outline:none}.kb-key.wait{background:var(--hud);color:#04120a;animation:kbblink .7s infinite}.kb-key.dup{border-color:#ffc94a}
+@keyframes kbblink{50%{opacity:.55}}@media (max-width:720px){#kbList{grid-template-columns:1fr}}
 </style>
 
 </head>
@@ -262,14 +269,10 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
           <label for="optFps"><input type="checkbox" id="optFps"> FPSを表示</label>
           <label for="optVol" class="vol">音量 <input type="range" id="optVol" min="0" max="100" step="5" value="80"> <output id="optVolV">80</output></label>
         </div>
-        <div class="keys desk-only">
-          <div><kbd>W</kbd><kbd>S</kbd>ピッチ</div><div><kbd>A</kbd><kbd>D</kbd>ロール</div>
-          <div><kbd>Q</kbd><kbd>E</kbd>ヨー</div><div><kbd>Shift</kbd>/<kbd>Z</kbd>加速・減速</div>
-          <div><kbd>Space</kbd>機銃</div><div><kbd>F</kbd>ミサイル</div>
-          <div><kbd>G</kbd>特殊兵装</div><div><kbd>V</kbd>フレア</div>
-          <div><kbd>R</kbd>ロック切替</div><div><kbd>X</kbd>ロック解除</div>
-          <div><kbd>C</kbd>視点（コックピット）</div><div><kbd>T</kbd>ターゲット視点</div>
-          <div><kbd>H</kbd>操作ガイド</div><div><kbd>P</kbd>/<kbd>M</kbd>ポーズ・消音</div>
+        <div class="keys-cfg desk-only">
+          <div class="kc-head"><b>キー設定</b><small>ボタンを押して、割り当てたいキーを押す（Esc でキャンセル、Delete で未割当）</small><button class="btn ghost sm" id="kbReset" type="button">初期設定に戻す</button></div>
+          <div id="kbList"></div>
+          <p class="note" id="kbMsg" role="status"></p>
         </div>
         <p class="touch-only md-small">左半分をドラッグで操縦。右下ボタンで MSL・GUN・BST・BRK・TGT・FLR、右上の SP で特殊兵装。ゲームパッドにも対応。</p>
       </div>
@@ -369,16 +372,7 @@ kbd{font:12px var(--mono);color:var(--ink);border:1px solid var(--hud-dim);paddi
   <div class="row" id="tutFinal" hidden><button class="btn sm" id="tutSortie">そのまま出撃</button><button class="btn ghost sm" id="tutEnd">タイトルへ</button></div>
 </div>
 
-<aside id="guide" hidden aria-label="操作ガイド">
-  <h3>FLIGHT</h3>
-  <div><span>ピッチ</span><kbd>W / S</kbd></div><div><span>ロール</span><kbd>A / D</kbd></div><div><span>ヨー</span><kbd>Q / E</kbd></div>
-  <div><span>加速 / 減速</span><kbd>Shift / Z</kbd></div><div><span>ハイG旋回</span><kbd>Shift+Z</kbd></div>
-  <h3>WEAPONS</h3>
-  <div><span>ミサイル</span><kbd>F</kbd></div><div><span>特殊兵装</span><kbd>G</kbd></div><div><span>機銃</span><kbd>Space</kbd></div><div><span>ロック切替</span><kbd>R</kbd></div>
-  <div><span>ロック解除</span><kbd>X</kbd></div><div><span>フレア</span><kbd>V</kbd></div>
-  <h3>VIEW</h3>
-  <div><span>ターゲット視点</span><kbd>T</kbd></div><div><span>視点切替</span><kbd>C</kbd></div><div><span>ガイド表示</span><kbd>H</kbd></div><div><span>ポーズ / 消音</span><kbd>P / M</kbd></div>
-</aside>
+<aside id="guide" hidden aria-label="操作ガイド"></aside>
 
 <div id="touch" hidden>
   <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div></div>
@@ -1470,27 +1464,52 @@ setVolume(SND.vol);
 
 /* ================= input ================= */
 const keys = {};
+// rebindable controls: each action has a primary and a secondary key
+const ACTIONS = [
+  ['pitchUp', 'ピッチ（機首上げ）', ['KeyS', 'ArrowDown']], ['pitchDown', 'ピッチ（機首下げ）', ['KeyW', 'ArrowUp']],
+  ['rollL', 'ロール左', ['KeyA', 'ArrowLeft']], ['rollR', 'ロール右', ['KeyD', 'ArrowRight']],
+  ['yawL', 'ヨー左', ['KeyQ', '']], ['yawR', 'ヨー右', ['KeyE', '']],
+  ['boost', '加速（アフターバーナー）', ['ShiftLeft', 'ShiftRight']], ['brake', '減速（エアブレーキ）', ['KeyZ', '']],
+  ['gun', '機銃', ['Space', '']], ['missile', 'ミサイル', ['KeyF', 'KeyJ']], ['special', '特殊兵装', ['KeyG', '']],
+  ['flare', 'フレア', ['KeyV', '']], ['lock', 'ロック切替', ['KeyR', 'Tab']], ['unlock', 'ロック解除', ['KeyX', '']],
+  ['cam', '視点切替（コックピット）', ['KeyC', '']], ['look', 'ターゲット視点（押している間）', ['KeyT', '']],
+  ['guide', '操作ガイド表示', ['KeyH', '']], ['pause', 'ポーズ', ['KeyP', 'Escape']], ['mute', '消音', ['KeyM', '']]
+];
+const BIND = {}; const BIND_DEF = Object.fromEntries(ACTIONS.map(([id, , d]) => [id, d]));
+function loadBinds() { let saved = {}; try { saved = JSON.parse(localStorage.getItem('skylance-keys') || '{}'); } catch (e) {}
+  for (const [id, , d] of ACTIONS) { const v = saved[id]; BIND[id] = Array.isArray(v) && v.length === 2 && v.every(x => typeof x === 'string') ? v.slice() : d.slice(); } }
+function saveBinds() { try { localStorage.setItem('skylance-keys', JSON.stringify(BIND)); } catch (e) {} }
+loadBinds();
+const isDown = a => BIND[a].some(c => c && keys[c]);
+const hasKey = (a, code) => !!code && BIND[a].includes(code);
+// readable name for a KeyboardEvent.code
+function keyName(code) { if (!code) return '―'; if (/^Key[A-Z]$/.test(code)) return code.slice(3); if (/^Digit\d$/.test(code)) return code.slice(5);
+  const m = { Space: 'Space', ShiftLeft: '左Shift', ShiftRight: '右Shift', ControlLeft: '左Ctrl', ControlRight: '右Ctrl', AltLeft: '左Alt', AltRight: '右Alt', Escape: 'Esc', Tab: 'Tab', Enter: 'Enter', Backspace: 'BS',
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`' };
+  return m[code] || (/^Numpad/.test(code) ? 'テンキー' + code.slice(6) : code); }
+const keyOf = a => keyName(BIND[a][0]), keysOf = a => BIND[a].filter(Boolean).map(keyName).join(' / ');
 const touch = { pitch: 0, roll: 0, boost: false, brake: false, gun: false, sp: false };
 let invert = false, padPrev = [];
 addEventListener('keydown', e => {
+  if (KB.capture) { kbCapture(e); return; }
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true; if (!e.repeat) onPress(e.code);
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') pauseGame(); });
 function onPress(code) {
-  if (code === 'KeyP' || code === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); return; }
-  if (code === 'KeyM') { setMute(!SND.muted); return; }
-  if (code === 'KeyH') { setGuide(!opts.guide); return; }
+  if (hasKey('pause', code) || code === 'Escape' && state === 'paused') { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); return; }
+  if (hasKey('mute', code)) { setMute(!SND.muted); return; }
+  if (hasKey('guide', code)) { setGuide(!opts.guide); return; }
   if (code === 'KeyN' && state === 'play' && mode === 'tutorial') { tutNext(); return; }
-  if (state === 'play' && mode === 'multi' && !player.alive && (code === 'KeyR' || code === 'Tab')) { const al = [...remotes.values()].filter(o => o.alive); if (al.length) NET.spec = al[(al.indexOf(NET.spec) + 1) % al.length]; return; }
+  if (state === 'play' && mode === 'multi' && !player.alive && (hasKey('lock', code))) { const al = [...remotes.values()].filter(o => o.alive); if (al.length) NET.spec = al[(al.indexOf(NET.spec) + 1) % al.length]; return; }
   if (state !== 'play' || !player.alive) return;
-  if (code === 'KeyX') { if (curTarget) { curTarget = null; lockT = 0; showMsg('LOCK RELEASED', HUDD, 1); } return; }
-  if (code === 'KeyF' || code === 'KeyJ') playerFireMissile();
-  else if (code === 'KeyG') fireSpecial();
-  else if (code === 'KeyR' || code === 'Tab') cycleTarget();
-  else if (code === 'KeyV') deployFlares();
-  else if (code === 'KeyC') { camView = (camView + 1) % 2; post.first = true; }
+  if (hasKey('unlock', code)) { if (curTarget) { curTarget = null; lockT = 0; showMsg('LOCK RELEASED', HUDD, 1); } return; }
+  if (hasKey('missile', code)) playerFireMissile();
+  else if (hasKey('special', code)) fireSpecial();
+  else if (hasKey('lock', code)) cycleTarget();
+  else if (hasKey('flare', code)) deployFlares();
+  else if (hasKey('cam', code)) { camView = (camView + 1) % 2; post.first = true; }
 }
 function readPad() {
   const out = { pitch: 0, roll: 0, yaw: 0, boost: false, brake: false, gun: false, look: false };
@@ -1509,19 +1528,19 @@ function readPad() {
 }
 function readInput() {
   const pad = readPad();
-  const k = c => keys[c] ? 1 : 0;
-  let pitch = (k('KeyS') || k('ArrowDown')) - (k('KeyW') || k('ArrowUp'));
+  const k = a => isDown(a) ? 1 : 0;
+  let pitch = k('pitchUp') - k('pitchDown');
   if (invert) pitch = -pitch;
   pitch = clamp(pitch + pad.pitch * (invert ? -1 : 1) + touch.pitch * (invert ? -1 : 1), -1, 1);
-  const roll = clamp((k('KeyD') || k('ArrowRight')) - (k('KeyA') || k('ArrowLeft')) + pad.roll + touch.roll, -1, 1);
-  const yaw = clamp(k('KeyE') - k('KeyQ') + pad.yaw, -1, 1);
+  const roll = clamp(k('rollR') - k('rollL') + pad.roll + touch.roll, -1, 1);
+  const yaw = clamp(k('yawR') - k('yawL') + pad.yaw, -1, 1);
   return {
     pitch, roll, yaw,
-    boost: !!(keys.ShiftLeft || keys.ShiftRight || pad.boost || touch.boost),
-    brake: !!(keys.KeyZ || pad.brake || touch.brake),
-    gun: !!(keys.Space || pad.gun || touch.gun),
-    look: !!(keys.KeyT || pad.look),
-    spFire: !!(keys.KeyG || pad.sp || touch.sp)
+    boost: !!(isDown('boost') || pad.boost || touch.boost),
+    brake: !!(isDown('brake') || pad.brake || touch.brake),
+    gun: !!(isDown('gun') || pad.gun || touch.gun),
+    look: !!(isDown('look') || pad.look),
+    spFire: !!(isDown('special') || pad.sp || touch.sp)
   };
 }
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -3025,11 +3044,42 @@ function drawHUD() {
 
 
 /* ================= controls guide overlay ================= */
+// ---- key configuration panel + live text that follows the bindings ----
+const KB = { capture: null };
+function renderKeyCfg() {
+  const box = $('#kbList'); if (!box) return; box.textContent = '';
+  for (const [id, label] of ACTIONS) { const row = document.createElement('div'); row.className = 'kb-row'; const sp = document.createElement('span'); sp.textContent = label; row.append(sp);
+    for (let slot = 0; slot < 2; slot++) { const b = document.createElement('button'); b.type = 'button'; b.className = 'kb-key'; b.textContent = keyName(BIND[id][slot]); b.title = slot ? 'サブキー' : 'メインキー';
+      b.addEventListener('click', () => { if (KB.capture) kbStop(); KB.capture = { id, slot, el: b }; b.classList.add('wait'); b.textContent = '押して…'; $('#kbMsg').textContent = `「${label}」のキーを押してね（Esc でキャンセル / Delete で未割当）`; });
+      row.append(b); }
+    box.append(row); }
+}
+function kbStop() { if (KB.capture) KB.capture.el.classList.remove('wait'); KB.capture = null; }
+function kbCapture(e) {
+  e.preventDefault(); e.stopPropagation(); const C = KB.capture; if (!C || e.repeat) return;
+  if (e.code === 'Escape') { kbStop(); renderKeyCfg(); $('#kbMsg').textContent = ''; return; }
+  const code = e.code === 'Delete' || e.code === 'Backspace' ? '' : e.code, msg = $('#kbMsg');
+  if (['MetaLeft', 'MetaRight', 'ContextMenu'].includes(code)) { msg.textContent = 'そのキーは使えないよ。別のキーを押してね'; return; }
+  let swap = '';
+  if (code) for (const [id, label] of ACTIONS) for (let s2 = 0; s2 < 2; s2++) if (BIND[id][s2] === code && !(id === C.id && s2 === C.slot)) { // taken: swap with whatever this slot held
+    BIND[id][s2] = BIND[C.id][C.slot]; swap = `「${label}」と入れ替えたよ`; }
+  BIND[C.id][C.slot] = code; saveBinds(); kbStop(); renderKeyCfg(); refreshKeyText();
+  msg.textContent = (code ? `${keyName(code)} を割り当てたよ。` : '未割当にしたよ。') + swap;
+}
+function refreshKeyText() { // guide, pause button and anything else that mentions keys
+  const g = $('#guide'); if (g) { const r = (l, a) => `<div><span>${l}</span><kbd>${a}</kbd></div>`;
+    g.innerHTML = '<h3>FLIGHT</h3>' + r('ピッチ', `${keyOf('pitchDown')} / ${keyOf('pitchUp')}`) + r('ロール', `${keyOf('rollL')} / ${keyOf('rollR')}`) + r('ヨー', `${keyOf('yawL')} / ${keyOf('yawR')}`)
+      + r('加速 / 減速', `${keyOf('boost')} / ${keyOf('brake')}`) + r('ハイG旋回', `${keyOf('boost')}+${keyOf('brake')}`)
+      + '<h3>WEAPONS</h3>' + r('ミサイル', keyOf('missile')) + r('特殊兵装', keyOf('special')) + r('機銃', keyOf('gun')) + r('ロック切替', keyOf('lock')) + r('ロック解除', keyOf('unlock')) + r('フレア', keyOf('flare'))
+      + '<h3>VIEW</h3>' + r('ターゲット視点', keyOf('look')) + r('視点切替', keyOf('cam')) + r('ガイド表示', keyOf('guide')) + r('ポーズ / 消音', `${keyOf('pause')} / ${keyOf('mute')}`); }
+  const b = $('#guideBtn'); if (b) b.textContent = (opts.guide ? '操作ガイドを隠す' : '操作ガイドを表示') + `（${keyOf('guide')}）`;
+  const ts = $('#tutSkip'); if (ts) ts.textContent = `N: このステップをスキップ　/　${keyOf('pause')}: メニュー`;
+}
 function setGuide(v, silent) {
   if (!silent) opts.guide = v;
   const show = v && (state === 'play' || state === 'paused') && !isTouch;
   $('#guide').hidden = !show;
-  const b = $('#guideBtn'); if (b) b.textContent = opts.guide ? '操作ガイドを隠す（H）' : '操作ガイドを表示（H）';
+  refreshKeyText();
 }
 
 /* ================= tutorial ================= */
@@ -3037,19 +3087,19 @@ let lastInp = null;
 const tut = { i: 0, prog: 0, kills: 0, hit: false, hdgAcc: 0, lastHdg: 0, wait: 0, spawned: false };
 const hdgNow = () => Math.atan2(player.fwd.x, -player.fwd.z);
 const TUT = [
-  { t: 'ピッチ（機首の上げ下げ）', d: '<kbd>S</kbd> で機首を上げ、<kbd>W</kbd> で下げる。何回か上下に動かしてみよう。', need: 2, f: (i, dt) => Math.abs(i.pitch) > .3 ? dt : 0 },
-  { t: 'ロール（機体の傾き）', d: '<kbd>A</kbd> / <kbd>D</kbd> で機体を左右に傾ける。翼の補助翼が逆向きに動くのを見てみよう。', need: 2, f: (i, dt) => Math.abs(i.roll) > .3 ? dt : 0 },
-  { t: '旋回', d: '<kbd>D</kbd> で右に傾けてから <kbd>S</kbd> を引き続けると旋回する。機首の向きを 120° 変えよう。', need: 120, setup() { tut.hdgAcc = 0; tut.lastHdg = hdgNow(); },
+  { t: 'ピッチ（機首の上げ下げ）', d: () => `<kbd>${keyOf('pitchUp')}</kbd> で機首を上げ、<kbd>${keyOf('pitchDown')}</kbd> で下げる。何回か上下に動かしてみよう。`, need: 2, f: (i, dt) => Math.abs(i.pitch) > .3 ? dt : 0 },
+  { t: 'ロール（機体の傾き）', d: () => `<kbd>${keyOf('rollL')}</kbd> / <kbd>${keyOf('rollR')}</kbd> で機体を左右に傾ける。翼の補助翼が逆向きに動くのを見てみよう。`, need: 2, f: (i, dt) => Math.abs(i.roll) > .3 ? dt : 0 },
+  { t: '旋回', d: () => `<kbd>${keyOf('rollR')}</kbd> で右に傾けてから <kbd>${keyOf('pitchUp')}</kbd> を引き続けると旋回する。機首の向きを 120° 変えよう。`, need: 120, setup() { tut.hdgAcc = 0; tut.lastHdg = hdgNow(); },
     f: () => { const h = hdgNow(); let d = h - tut.lastHdg; d = Math.atan2(Math.sin(d), Math.cos(d)); tut.lastHdg = h; tut.hdgAcc += Math.abs(d) * 180 / Math.PI; return null; }, val: () => tut.hdgAcc },
-  { t: '加速と減速', d: '<kbd>Shift</kbd> でアフターバーナー加速、<kbd>Z</kbd> でエアブレーキ（背中の板が立つ）。時速 1100km まで加速しよう。', need: 1, f: () => player.speed * 3.6 > 1100 ? 1 : 0 },
-  { t: 'ハイG旋回', d: '<kbd>Shift</kbd>＋<kbd>Z</kbd> を同時に押しながら <kbd>S</kbd>。速度と引き換えに、すごく小さく曲がれる。', need: 1.5, f: (i, dt) => player.highG && Math.abs(i.pitch) > .3 ? dt : 0 },
-  { t: 'ロックオンとミサイル', d: '前方に訓練用ドローンが出た。点線の円の中に入れるとロックオン（ダイヤが赤くなって「LOCK」）。そこで <kbd>F</kbd> でミサイル発射！<kbd>R</kbd> でロック対象を切り替えられる。', need: 1,
+  { t: '加速と減速', d: () => `<kbd>${keyOf('boost')}</kbd> でアフターバーナー加速、<kbd>${keyOf('brake')}</kbd> でエアブレーキ（背中の板が立つ）。時速 1100km まで加速しよう。`, need: 1, f: () => player.speed * 3.6 > 1100 ? 1 : 0 },
+  { t: 'ハイG旋回', d: () => `<kbd>${keyOf('boost')}</kbd>＋<kbd>${keyOf('brake')}</kbd> を同時に押しながら <kbd>${keyOf('pitchUp')}</kbd>。速度と引き換えに、すごく小さく曲がれる。`, need: 1.5, f: (i, dt) => player.highG && Math.abs(i.pitch) > .3 ? dt : 0 },
+  { t: 'ロックオンとミサイル', d: () => `前方に訓練用ドローンが出た。点線の円の中に入れるとロックオン（ダイヤが赤くなって「LOCK」）。そこで <kbd>${keyOf('missile')}</kbd> でミサイル発射！<kbd>${keyOf('lock')}</kbd> でロック対象を切り替えられる。`, need: 1,
     setup() { tut.kills = 0; spawnDrone(2600); }, f: () => tut.kills > 0 ? 1 : 0 },
-  { t: '機銃', d: '近くにもう1機。<kbd>Space</kbd> 長押しで機銃。敵が近いと出る小さな丸（ガンパイパー）を敵に重ねて撃とう。', need: 1,
+  { t: '機銃', d: () => `近くにもう1機。<kbd>${keyOf('gun')}</kbd> 長押しで機銃。敵が近いと出る小さな丸（ガンパイパー）を敵に重ねて撃とう。`, need: 1,
     setup() { tut.kills = 0; spawnDrone(1000); }, f: () => tut.kills > 0 ? 1 : 0 },
-  { t: 'ミサイル回避', d: '敵ミサイル接近！画面の端が赤く光る方向から来る。<kbd>V</kbd> でフレアを撒くか、ハイG旋回で振り切ろう。', need: 1,
+  { t: 'ミサイル回避', d: () => `敵ミサイル接近！画面の端が赤く光る方向から来る。<kbd>${keyOf('flare')}</kbd> でフレアを撒くか、ハイG旋回で振り切ろう。`, need: 1,
     setup() { tut.hit = false; tutMissile(); }, f: () => { if (missiles.some(m => m.tut)) return 0; if (tut.hit) { showMsg('被弾！もう一度', WARN, 2, true); tut.hit = false; tutMissile(); return 0; } return 1; } },
-  { t: '訓練完了', d: 'お疲れさま、ケストレル1。<kbd>H</kbd> で操作ガイドはいつでも出せる。準備ができたら出撃だ！', need: Infinity, final: true, f: () => 0 }
+  { t: '訓練完了', d: () => `お疲れさま、ケストレル1。<kbd>${keyOf('guide')}</kbd> で操作ガイドはいつでも出せる。準備ができたら出撃だ！`, need: Infinity, final: true, f: () => 0 }
 ];
 function spawnDrone(dist) {
   const P = player; _v1.copy(P.pos).addScaledVector(P.fwd, dist); _v1.y = Math.max(_v1.y, floorAt(_v1.x, _v1.z) + 900);
@@ -3075,7 +3125,7 @@ function startTutorial() {
 function tutNext() {
   if (tut.i >= TUT.length - 1) return;
   tut.i++; tut.prog = 0; const st = TUT[tut.i]; if (st.setup) st.setup();
-  $('#tut').hidden = false; $('#tutStep').textContent = `STEP ${tut.i + 1} / ${TUT.length}`; $('#tutTitle').textContent = st.t; $('#tutDesc').innerHTML = st.d;
+  $('#tut').hidden = false; $('#tutStep').textContent = `STEP ${tut.i + 1} / ${TUT.length}`; $('#tutTitle').textContent = st.t; $('#tutDesc').innerHTML = typeof st.d === 'function' ? st.d() : st.d;
   $('#tutBar').style.width = '0%'; $('#tutFinal').hidden = !st.final; $('#tutSkip').hidden = !!st.final;
   if (tut.i > 0) sfxTone(880, 1320, .18, .08, 'triangle');
 }
@@ -4792,6 +4842,8 @@ $('#lobbyBack').addEventListener('click', () => { netLeave(); $('#lobby').hidden
 $('#tutEnd').addEventListener('click', toTitle);
 $('#tutSortie').addEventListener('click', () => { if (sortieOk()) startMission(); });
 $('#guideBtn').addEventListener('click', () => setGuide(!opts.guide));
+$('#kbReset').addEventListener('click', () => { kbStop(); for (const id in BIND_DEF) BIND[id] = BIND_DEF[id].slice(); saveBinds(); renderKeyCfg(); refreshKeyText(); $('#kbMsg').textContent = '初期設定に戻したよ'; });
+renderKeyCfg(); refreshKeyText();
 $('#readyBtn').addEventListener('click', () => { NET.rdy = NET.rdy ? 0 : 1; updateMroomUI(true); sfxTone(700, 1050, .1, .06, 'triangle'); });
 document.querySelectorAll('#mrModeRow [data-mode]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.mode = b.dataset.mode; updateMroomUI(true); }));
 document.querySelectorAll('#mrDiffRow [data-diff]').forEach(b => b.addEventListener('click', () => { if (roster()[0] !== NET.me) return; NET.diff = b.dataset.diff; updateMroomUI(true); }));
